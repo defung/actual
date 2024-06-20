@@ -9,12 +9,9 @@ export type Init = typeof init;
 
 export function send<K extends keyof ServerEvents>(
   type: K,
-  args?: ServerEvents[k],
+  args?: ServerEvents[K],
 ): void;
 export type Send = typeof send;
-
-export function getEvents(): unknown[];
-export type GetEvents = typeof getEvents;
 
 export function getNumClients(): number;
 export type GetNumClients = typeof getNumClients;

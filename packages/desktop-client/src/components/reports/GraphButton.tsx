@@ -1,14 +1,15 @@
-import React, { type HTMLProps } from 'react';
+import React, { type HTMLProps, type CSSProperties } from 'react';
 
-import { type CSSProperties, styles, theme } from '../../style';
-import { Button } from '../common/Button';
-import { Text } from '../common/Text';
-import { Tooltip } from '../common/Tooltip';
+import { Button } from '@actual-app/components/button';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { Tooltip } from '@actual-app/components/tooltip';
 
 type GraphButtonProps = HTMLProps<HTMLButtonElement> & {
   selected?: boolean;
   style?: CSSProperties;
-  onSelect?: (newValue: string) => void;
+  onSelect?: () => void;
   title?: string;
   disabled?: boolean;
 };
@@ -28,15 +29,16 @@ export const GraphButton = ({
       style={{ ...styles.tooltip, lineHeight: 1.5, padding: '6px 10px' }}
     >
       <Button
-        type="bare"
+        variant="bare"
         style={{
           ...(selected && {
             backgroundColor: theme.buttonBareBackgroundHover,
           }),
           ...style,
         }}
-        onClick={onSelect}
-        disabled={disabled}
+        onPress={onSelect}
+        isDisabled={disabled}
+        aria-label={title}
       >
         {children}
       </Button>

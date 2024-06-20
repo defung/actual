@@ -6,19 +6,23 @@ import React, {
   useEffect,
   type FocusEventHandler,
   type KeyboardEventHandler,
+  type CSSProperties,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { evalArithmetic } from 'loot-core/src/shared/arithmetic';
-import { amountToInteger, appendDecimals } from 'loot-core/src/shared/util';
+import { Button } from '@actual-app/components/button';
+import { SvgAdd, SvgSubtract } from '@actual-app/components/icons/v1';
+import { baseInputStyle, Input } from '@actual-app/components/input';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { css, cx } from '@emotion/css';
 
-import { useLocalPref } from '../../hooks/useLocalPref';
-import { useMergedRefs } from '../../hooks/useMergedRefs';
-import { SvgAdd, SvgSubtract } from '../../icons/v1';
-import { type CSSProperties, theme } from '../../style';
-import { Button } from '../common/Button';
-import { InputWithContent } from '../common/InputWithContent';
-import { View } from '../common/View';
-import { useFormat } from '../spreadsheet/useFormat';
+import { evalArithmetic } from 'loot-core/shared/arithmetic';
+import { amountToInteger, appendDecimals } from 'loot-core/shared/util';
+
+import { useFormat } from '@desktop-client/hooks/useFormat';
+import { useMergedRefs } from '@desktop-client/hooks/useMergedRefs';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
 
 type AmountInputProps = {
   id?: string;
@@ -32,6 +36,7 @@ type AmountInputProps = {
   onUpdate?: (amount: number) => void;
   style?: CSSProperties;
   inputStyle?: CSSProperties;
+  inputClassName?: string;
   focused?: boolean;
   disabled?: boolean;
   autoDecimals?: boolean;
@@ -49,21 +54,26 @@ export function AmountInput({
   onEnter,
   style,
   inputStyle,
+  inputClassName,
   focused,
   disabled = false,
   autoDecimals = false,
 }: AmountInputProps) {
   const format = useFormat();
-  const negative = (initialValue === 0 && zeroSign === '-') || initialValue < 0;
+  const [symbol, setSymbol] = useState<'+' | '-'>(
+    initialValue === 0 ? zeroSign : initialValue > 0 ? '+' : '-',
+  );
+
+  const [isFocused, setIsFocused] = useState(focused ?? false);
 
   const initialValueAbsolute = format(Math.abs(initialValue || 0), 'financial');
   const [value, setValue] = useState(initialValueAbsolute);
   useEffect(() => setValue(initialValueAbsolute), [initialValueAbsolute]);
 
-  const buttonRef = useRef();
+  const buttonRef = useRef(null);
   const ref = useRef<HTMLInputElement>(null);
   const mergedRef = useMergedRefs<HTMLInputElement>(inputRef, ref);
-  const [hideFraction = false] = useLocalPref('hideFraction');
+  const [hideFraction] = useSyncedPref('hideFraction');
 
   useEffect(() => {
     if (focused) {
@@ -72,72 +82,122 @@ export function AmountInput({
   }, [focused]);
 
   function onSwitch() {
-    fireUpdate(!negative);
+    const amount = getAmount();
+    if (amount === 0) {
+      setSymbol(symbol === '+' ? '-' : '+');
+    }
+    fireUpdate(amount * -1);
   }
 
-  function getAmount(negate) {
-    const valueOrInitial = Math.abs(amountToInteger(evalArithmetic(value)));
-    return negate ? valueOrInitial * -1 : valueOrInitial;
+  function getAmount() {
+    const signedValued = symbol === '-' ? symbol + value : value;
+    return amountToInteger(evalArithmetic(signedValued));
   }
 
   function onInputTextChange(val) {
-    val = autoDecimals ? appendDecimals(val, hideFraction) : val;
+    val = autoDecimals
+      ? appendDecimals(val, String(hideFraction) === 'true')
+      : val;
     setValue(val ? val : '');
     onChangeValue?.(val);
   }
 
-  function fireUpdate(negate) {
-    onUpdate?.(getAmount(negate));
+  function fireUpdate(amount) {
+    onUpdate?.(amount);
+    if (amount > 0) {
+      setSymbol('+');
+    } else if (amount < 0) {
+      setSymbol('-');
+    }
   }
 
   function onInputAmountBlur(e) {
     if (!ref.current?.contains(e.relatedTarget)) {
-      fireUpdate(negative);
+      const amount = getAmount();
+      fireUpdate(amount);
     }
     onBlur?.(e);
   }
 
   return (
-    <InputWithContent
-      id={id}
-      inputRef={mergedRef}
-      inputMode="decimal"
-      leftContent={
-        <Button
-          type="bare"
-          disabled={disabled}
-          aria-label={`Make ${negative ? 'positive' : 'negative'}`}
-          style={{ padding: '0 7px' }}
-          onPointerUp={onSwitch}
-          onPointerDown={e => e.preventDefault()}
-          ref={buttonRef}
-        >
-          {negative ? (
-            <SvgSubtract style={{ width: 8, height: 8, color: 'inherit' }} />
-          ) : (
-            <SvgAdd style={{ width: 8, height: 8, color: 'inherit' }} />
-          )}
-        </Button>
-      }
-      value={value}
-      disabled={disabled}
-      focused={focused}
-      style={{ flex: 1, alignItems: 'stretch', ...style }}
-      inputStyle={inputStyle}
-      onKeyUp={e => {
-        if (e.key === 'Enter') {
-          fireUpdate(negative);
-        }
+    <View
+      style={{
+        ...baseInputStyle,
+        padding: 0,
+        flexDirection: 'row',
+        flex: 1,
+        alignItems: 'stretch',
+        ...style,
+        ...(isFocused && {
+          boxShadow: '0 0 0 1px ' + theme.formInputShadowSelected,
+        }),
       }}
-      onChangeValue={onInputTextChange}
-      onBlur={onInputAmountBlur}
-      onFocus={onFocus}
-      onEnter={onEnter}
-    />
+    >
+      <Button
+        variant="bare"
+        isDisabled={disabled}
+        aria-label={`Make ${symbol === '-' ? 'positive' : 'negative'}`}
+        style={{ padding: '0 7px' }}
+        onPress={onSwitch}
+        ref={buttonRef}
+      >
+        {symbol === '-' && (
+          <SvgSubtract style={{ width: 8, height: 8, color: 'inherit' }} />
+        )}
+        {symbol === '+' && (
+          <SvgAdd style={{ width: 8, height: 8, color: 'inherit' }} />
+        )}
+      </Button>
+
+      <Input
+        id={id}
+        ref={mergedRef}
+        inputMode="decimal"
+        value={value}
+        disabled={disabled}
+        style={inputStyle}
+        className={cx(
+          css({
+            width: '100%',
+            flex: 1,
+            '&, &[data-focused], &[data-hovered]': {
+              border: 0,
+              backgroundColor: 'transparent',
+              boxShadow: 'none',
+              color: 'inherit',
+            },
+          }),
+          inputClassName,
+        )}
+        onFocus={e => {
+          setIsFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={e => {
+          setIsFocused(false);
+          onInputAmountBlur(e);
+        }}
+        onEnter={(_, e) => {
+          onEnter?.(e);
+          const amount = getAmount();
+          fireUpdate(amount);
+        }}
+        onChangeValue={onInputTextChange}
+      />
+    </View>
   );
 }
 
-export function BetweenAmountInput({ defaultValue, onChange }) {
+type BetweenAmountInputProps = {
+  defaultValue: { num1: number; num2: number };
+  onChange: (newValue: { num1: number; num2: number }) => void;
+};
+
+export function BetweenAmountInput({
+  defaultValue,
+  onChange,
+}: BetweenAmountInputProps) {
+  const { t } = useTranslation();
   const [num1, setNum1] = useState(defaultValue.num1);
   const [num2, setNum2] = useState(defaultValue.num2);
 
@@ -151,7 +211,7 @@ export function BetweenAmountInput({ defaultValue, onChange }) {
         }}
         style={{ color: theme.formInputText }}
       />
-      <View style={{ margin: '0 5px' }}>and</View>
+      <View style={{ margin: '0 5px' }}>{t('and')}</View>
       <AmountInput
         value={num2}
         onUpdate={value => {

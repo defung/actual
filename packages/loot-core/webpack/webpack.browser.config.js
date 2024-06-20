@@ -41,6 +41,7 @@ module.exports = {
       process: require.resolve('process/browser'),
       stream: require.resolve('stream-browserify'),
       tls: false,
+      https: false,
       // used by memfs in a check which we can ignore I think
       url: false,
       zlib: require.resolve('browserify-zlib'),
@@ -61,6 +62,12 @@ module.exports = {
         test: /\.pegjs$/,
         use: { loader: path.resolve(__dirname, '../peg-loader.js') },
       },
+      {
+        test: /\.m?js/,
+        resolve: {
+          fullySpecified: false,
+        },
+      },
     ],
   },
   optimization: {
@@ -76,7 +83,7 @@ module.exports = {
           compress: {
             drop_debugger: false,
           },
-          mangle: true,
+          mangle: false,
         },
       }),
     ],

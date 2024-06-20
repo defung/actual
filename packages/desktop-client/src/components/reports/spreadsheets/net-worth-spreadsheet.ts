@@ -1,20 +1,22 @@
 import * as d from 'date-fns';
+import { type Locale } from 'date-fns';
 import keyBy from 'lodash/keyBy';
 
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { q } from 'loot-core/src/shared/query';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { q } from 'loot-core/shared/query';
 import {
   integerToCurrency,
   integerToAmount,
   amountToInteger,
-} from 'loot-core/src/shared/util';
+} from 'loot-core/shared/util';
 import {
   type AccountEntity,
   type RuleConditionEntity,
 } from 'loot-core/types/models';
+
+import { type useSpreadsheet } from '@desktop-client/hooks/useSpreadsheet';
+import { aqlQuery } from '@desktop-client/queries/aqlQuery';
 
 type Balance = {
   date: string;
@@ -26,7 +28,8 @@ export function createSpreadsheet(
   end: string,
   accounts: AccountEntity[],
   conditions: RuleConditionEntity[] = [],
-  conditionsOp: 'and' | 'or',
+  conditionsOp: 'and' | 'or' = 'and',
+  locale: Locale,
 ) {
   return async (
     spreadsheet: ReturnType<typeof useSpreadsheet>,
@@ -40,17 +43,17 @@ export function createSpreadsheet(
     const data = await Promise.all(
       accounts.map(async acct => {
         const [starting, balances]: [number, Balance[]] = await Promise.all([
-          runQuery(
+          aqlQuery(
             q('transactions')
               .filter({
                 [conditionsOpKey]: filters,
                 account: acct.id,
-                date: { $lt: start + '-01' },
+                date: { $lt: monthUtils.firstDayOfMonth(start) },
               })
               .calculate({ $sum: '$amount' }),
           ).then(({ data }) => data),
 
-          runQuery(
+          aqlQuery(
             q('transactions')
               .filter({
                 [conditionsOpKey]: filters,
@@ -58,8 +61,8 @@ export function createSpreadsheet(
               .filter({
                 account: acct.id,
                 $and: [
-                  { date: { $gte: start + '-01' } },
-                  { date: { $lte: end + '-31' } },
+                  { date: { $gte: monthUtils.firstDayOfMonth(start) } },
+                  { date: { $lte: monthUtils.lastDayOfMonth(end) } },
                 ],
               })
               .groupBy({ $month: '$date' })
@@ -78,7 +81,7 @@ export function createSpreadsheet(
       }),
     );
 
-    setData(recalculate(data, start, end));
+    setData(recalculate(data, start, end, locale));
   };
 }
 
@@ -90,6 +93,7 @@ function recalculate(
   }>,
   start: string,
   end: string,
+  locale: Locale,
 ) {
   const months = monthUtils.rangeInclusive(start, end);
 
@@ -149,13 +153,13 @@ function recalculate(
     endNetWorth = total;
 
     arr.push({
-      x: d.format(x, 'MMM ’yy'),
+      x: d.format(x, 'MMM ’yy', { locale }),
       y: integerToAmount(total),
       assets: integerToCurrency(assets),
       debt: `-${integerToCurrency(debt)}`,
       change: integerToCurrency(change),
       networth: integerToCurrency(total),
-      date: d.format(x, 'MMMM yyyy'),
+      date: d.format(x, 'MMMM yyyy', { locale }),
     });
 
     arr.forEach(item => {

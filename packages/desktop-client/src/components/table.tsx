@@ -1,48 +1,56 @@
 // @ts-strict-ignore
 import React, {
+  type FocusEvent,
   forwardRef,
-  useState,
   useCallback,
-  useRef,
-  useEffect,
-  useLayoutEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
+  useRef,
+  useState,
   type ComponentProps,
-  type ReactNode,
+  type JSX,
   type KeyboardEvent,
-  type UIEvent,
   type ReactElement,
+  type ReactNode,
   type Ref,
+  type RefObject,
+  type UIEvent,
 } from 'react';
-import { useStore } from 'react-redux';
 import AutoSizer from 'react-virtualized-auto-sizer';
 
-import {
-  AvoidRefocusScrollProvider,
-  useProperFocus,
-} from '../hooks/useProperFocus';
-import { useSelectedItems } from '../hooks/useSelected';
-import { AnimatedLoading } from '../icons/AnimatedLoading';
-import { SvgDelete, SvgExpandArrow } from '../icons/v0';
-import { SvgCheckmark } from '../icons/v1';
-import { type CSSProperties, styles, theme } from '../style';
+import { Button } from '@actual-app/components/button';
+import { AnimatedLoading } from '@actual-app/components/icons/AnimatedLoading';
+import { SvgDelete, SvgExpandArrow } from '@actual-app/components/icons/v0';
+import { SvgCheckmark } from '@actual-app/components/icons/v1';
+import { Input } from '@actual-app/components/input';
+import { Menu, type MenuItem } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
+import { type CSSProperties, styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { Button } from './common/Button';
-import { Input } from './common/Input';
-import { Menu } from './common/Menu';
-import { Popover } from './common/Popover';
-import { Text } from './common/Text';
-import { View } from './common/View';
 import { FixedSizeList } from './FixedSizeList';
 import {
   ConditionalPrivacyFilter,
   mergeConditionalPrivacyFilterProps,
 } from './PrivacyFilter';
-import { type Binding } from './spreadsheet';
-import { type FormatType, useFormat } from './spreadsheet/useFormat';
-import { useSheetValue } from './spreadsheet/useSheetValue';
-import { IntersectionBoundary } from './tooltips';
+
+import { type FormatType, useFormat } from '@desktop-client/hooks/useFormat';
+import { useModalState } from '@desktop-client/hooks/useModalState';
+import {
+  AvoidRefocusScrollProvider,
+  useProperFocus,
+} from '@desktop-client/hooks/useProperFocus';
+import { useSelectedItems } from '@desktop-client/hooks/useSelected';
+import { useSheetValue } from '@desktop-client/hooks/useSheetValue';
+import {
+  type Spreadsheets,
+  type SheetFields,
+  type SheetNames,
+  type Binding,
+} from '@desktop-client/spreadsheet';
 
 export const ROW_HEIGHT = 32;
 
@@ -59,7 +67,7 @@ function fireBlur(onBlur, e) {
 }
 
 type FieldProps = ComponentProps<typeof View> & {
-  width: CSSProperties['width'];
+  width?: CSSProperties['width'];
   name?: string;
   truncate?: boolean;
   contentStyle?: CSSProperties;
@@ -114,8 +122,9 @@ export const Field = forwardRef<HTMLDivElement, FieldProps>(function Field(
 export function UnexposedCellContent({
   value,
   formatter,
-  linkStyle,
-}: Pick<CellProps, 'value' | 'formatter' | 'linkStyle'>) {
+  style,
+  ...props
+}: Pick<CellProps, 'value' | 'formatter' | 'style'>) {
   return (
     <Text
       style={{
@@ -123,7 +132,8 @@ export function UnexposedCellContent({
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
-        ...linkStyle,
+        ...style,
+        ...props,
       }}
     >
       {formatter ? formatter(value) : value}
@@ -139,10 +149,11 @@ type CellProps = Omit<ComponentProps<typeof View>, 'children' | 'value'> & {
   plain?: boolean;
   exposed?: boolean;
   children?: ReactNode | (() => ReactNode);
-  unexposedContent?: ReactNode;
+  unexposedContent?: (
+    props: ComponentProps<typeof UnexposedCellContent>,
+  ) => ReactNode;
   value?: string;
-  valueStyle?: CSSProperties;
-  linkStyle?: CSSProperties;
+  valueStyle?: CSSProperties | null;
   onExpose?: (name: string) => void;
   privacyFilter?: ComponentProps<
     typeof ConditionalPrivacyFilter
@@ -162,7 +173,6 @@ export function Cell({
   plain,
   style,
   valueStyle,
-  linkStyle,
   unexposedContent,
   privacyFilter,
   ...viewProps
@@ -190,11 +200,6 @@ export function Cell({
         privacyFilter={mergeConditionalPrivacyFilterProps(
           {
             activationFilters: [!focused, !exposed],
-            style: {
-              position: 'absolute',
-              width: '100%',
-              height: '100%',
-            },
           },
           privacyFilter,
         )}
@@ -233,12 +238,10 @@ export function Cell({
                   }
             }
           >
-            {unexposedContent || (
-              <UnexposedCellContent
-                linkStyle={linkStyle}
-                value={value}
-                formatter={formatter}
-              />
+            {unexposedContent ? (
+              unexposedContent({ value, formatter })
+            ) : (
+              <UnexposedCellContent value={value} formatter={formatter} />
             )}
           </View>
         )}
@@ -250,7 +253,6 @@ export function Cell({
       exposed,
       children,
       plain,
-      exposed,
       valueStyle,
       onExpose,
       name,
@@ -276,16 +278,13 @@ type RowProps = ComponentProps<typeof View> & {
   inset?: number;
   collapsed?: boolean;
 };
-export function Row({
-  inset = 0,
-  collapsed,
-  children,
-  height,
-  style,
-  ...nativeProps
-}: RowProps) {
+export const Row = forwardRef<HTMLDivElement, RowProps>(function Row(
+  { inset = 0, collapsed, children, height, style, ...nativeProps },
+  ref,
+) {
   return (
     <View
+      ref={ref}
       style={{
         flexDirection: 'row',
         height: height || ROW_HEIGHT,
@@ -302,7 +301,7 @@ export function Row({
       {inset !== 0 && <Field width={inset} />}
     </View>
   );
-}
+});
 
 const inputCellStyle = {
   padding: '5px 3px',
@@ -314,8 +313,12 @@ const readonlyInputStyle = {
   '::selection': { backgroundColor: theme.formInputTextReadOnlySelection },
 };
 
-type InputValueProps = ComponentProps<typeof Input> & {
+type InputValueProps = Omit<
+  ComponentProps<typeof Input>,
+  'value' | 'onUpdate'
+> & {
   value?: string;
+  onUpdate?: (newValue: string) => void;
 };
 
 function InputValue({
@@ -325,6 +328,12 @@ function InputValue({
   ...props
 }: InputValueProps) {
   const [value, setValue] = useState(defaultValue);
+  const [prevDefaultValue, setPrevDefaultValue] = useState(defaultValue);
+
+  if (prevDefaultValue !== defaultValue) {
+    setValue(defaultValue);
+    setPrevDefaultValue(defaultValue);
+  }
 
   function onBlur_(e) {
     if (onBlur) {
@@ -339,12 +348,14 @@ function InputValue({
       e.stopPropagation();
     }
 
-    if (e.key === 'Escape') {
-      if (value !== defaultValue) {
-        setValue(defaultValue);
-      }
-    } else if (shouldSaveFromKey(e)) {
+    if (shouldSaveFromKey(e)) {
       onUpdate?.(value);
+    }
+  }
+
+  function onEscape() {
+    if (value !== defaultValue) {
+      setValue(defaultValue);
     }
   }
 
@@ -366,10 +377,11 @@ function InputValue({
     <Input
       {...props}
       value={value}
-      onChangeValue={text => setValue_(text)}
+      onChangeValue={setValue_}
       onBlur={onBlur_}
       onUpdate={onUpdate}
       onKeyDown={onKeyDown}
+      onEscape={onEscape}
       style={{
         ...inputCellStyle,
         ...(props.readOnly ? readonlyInputStyle : null),
@@ -407,7 +419,7 @@ export function InputCell({
   );
 }
 
-function shouldSaveFromKey(e) {
+function shouldSaveFromKey(e: KeyboardEvent) {
   switch (e.key) {
     case 'Tab':
     case 'Enter':
@@ -418,17 +430,17 @@ function shouldSaveFromKey(e) {
 }
 
 type CustomCellRenderProps = {
-  onBlur: (ev: UIEvent<unknown>) => void;
-  onKeyDown: (ev: KeyboardEvent<unknown>) => void;
+  onBlur: (ev: FocusEvent) => void;
+  onKeyDown: (ev: KeyboardEvent) => void;
   onUpdate: (value: string) => void;
   onSave: (value: string) => void;
-  shouldSaveFromKey: (ev: KeyboardEvent<unknown>) => boolean;
+  shouldSaveFromKey: (ev: KeyboardEvent) => boolean;
   inputStyle: CSSProperties;
 };
 type CustomCellProps = Omit<ComponentProps<typeof Cell>, 'children'> & {
-  children: (props: CustomCellRenderProps) => ReactNode;
-  onUpdate: (value: string) => void;
-  onBlur: (ev: UIEvent<unknown>) => void;
+  children?: (props: CustomCellRenderProps) => ReactNode;
+  onUpdate?: (value: string) => void;
+  onBlur?: (ev: UIEvent<unknown>) => void;
 };
 export function CustomCell({
   value: defaultValue,
@@ -445,7 +457,7 @@ export function CustomCell({
     setPrevDefaultValue(defaultValue);
   }
 
-  function onBlur_(e) {
+  function onBlur_(e: FocusEvent) {
     // Only save on blur if the app is focused. Blur events fire when
     // the app unfocuses, and it's unintuitive to save the value since
     // the input will be focused again when the app regains focus
@@ -455,7 +467,7 @@ export function CustomCell({
     }
   }
 
-  function onKeyDown(e) {
+  function onKeyDown(e: KeyboardEvent) {
     if (shouldSaveFromKey(e)) {
       onUpdate?.(value);
     }
@@ -464,7 +476,7 @@ export function CustomCell({
   return (
     <Cell {...props} value={defaultValue}>
       {() =>
-        children({
+        children?.({
           onBlur: onBlur_,
           onKeyDown,
           onUpdate: val => setValue(val),
@@ -668,31 +680,45 @@ export function SelectCell({
   );
 }
 
-type SheetCellValueProps = {
-  binding: Binding;
+type SheetCellValueProps<
+  SheetName extends SheetNames,
+  FieldName extends SheetFields<SheetName>,
+> = {
+  binding: Binding<SheetName, FieldName>;
   type: FormatType;
-  getValueStyle?: (value: string | number) => CSSProperties;
-  formatExpr?: (value) => string;
+  getValueStyle?: (value: Spreadsheets[SheetName][FieldName]) => CSSProperties;
+  formatExpr?: (value: Spreadsheets[SheetName][FieldName]) => string;
   unformatExpr?: (value: string) => unknown;
   privacyFilter?: ComponentProps<
     typeof ConditionalPrivacyFilter
   >['privacyFilter'];
 };
 
-type SheetCellProps = ComponentProps<typeof Cell> & {
-  valueProps: SheetCellValueProps;
-  inputProps?: Omit<ComponentProps<typeof InputValue>, 'value' | 'onUpdate'>;
+export type SheetCellProps<
+  SheetName extends SheetNames,
+  FieldName extends SheetFields<SheetName>,
+> = ComponentProps<typeof Cell> & {
+  valueProps: SheetCellValueProps<SheetName, FieldName>;
+  inputProps?: Omit<
+    ComponentProps<typeof InputValue>,
+    'value' | 'onUpdate' | 'onBlur'
+  > & {
+    onBlur?: () => void;
+  };
   onSave?: (value) => void;
   textAlign?: CSSProperties['textAlign'];
 };
-export function SheetCell({
+export function SheetCell<
+  SheetName extends SheetNames,
+  FieldName extends SheetFields<SheetName>,
+>({
   valueProps,
   valueStyle,
   inputProps,
   textAlign,
   onSave,
   ...props
-}: SheetCellProps) {
+}: SheetCellProps<SheetName, FieldName>) {
   const {
     binding,
     type,
@@ -702,10 +728,10 @@ export function SheetCell({
     privacyFilter,
   } = valueProps;
 
-  const sheetValue = useSheetValue(binding, e => {
+  const sheetValue = useSheetValue(binding, () => {
     // "close" the cell if it's editing
     if (props.exposed && inputProps && inputProps.onBlur) {
-      inputProps.onBlur(e);
+      inputProps.onBlur();
     }
   });
   const format = useFormat();
@@ -719,7 +745,7 @@ export function SheetCell({
       }
       textAlign={textAlign}
       {...props}
-      value={sheetValue}
+      value={String(sheetValue ?? '')}
       formatter={value =>
         props.formatter ? props.formatter(value, type) : format(value, type)
       }
@@ -735,7 +761,7 @@ export function SheetCell({
       {() => {
         return (
           <InputValue
-            value={formatExpr ? formatExpr(sheetValue) : sheetValue}
+            value={formatExpr ? formatExpr(sheetValue) : sheetValue.toString()}
             onUpdate={value => {
               onSave(unformatExpr ? unformatExpr(value) : value);
             }}
@@ -793,30 +819,45 @@ export function TableHeader({
   );
 }
 
-export function SelectedItemsButton({ name, items, onSelect }) {
+type SelectedItemsButtonProps<Name extends string> = {
+  id: string;
+  name: ((count: number) => string) | string;
+  items: MenuItem<Name>[];
+  onSelect: (name: Name, items: string[]) => void;
+};
+
+export function SelectedItemsButton<Name extends string>({
+  id,
+  name,
+  items,
+  onSelect,
+}: SelectedItemsButtonProps<Name>) {
   const selectedItems = useSelectedItems();
-  const [menuOpen, setMenuOpen] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef(null);
 
   if (selectedItems.size === 0) {
     return null;
   }
 
+  const buttonLabel =
+    typeof name === 'function' ? name(selectedItems.size) : name;
+
   return (
     <View style={{ marginLeft: 10, flexShrink: 0 }}>
       <Button
         ref={triggerRef}
-        type="bare"
+        variant="bare"
         style={{ color: theme.pageTextPositive }}
-        onClick={() => setMenuOpen(true)}
-        data-testid={name + '-select-button'}
+        onPress={() => setMenuOpen(true)}
+        data-testid={id + '-select-button'}
       >
         <SvgExpandArrow
           width={8}
           height={8}
           style={{ marginRight: 5, color: theme.pageText }}
         />
-        {selectedItems.size} {name}
+        {buttonLabel}
       </Button>
 
       <Popover
@@ -828,7 +869,7 @@ export function SelectedItemsButton({ name, items, onSelect }) {
         }}
         isOpen={menuOpen}
         onOpenChange={() => setMenuOpen(false)}
-        data-testid={name + '-select-tooltip'}
+        data-testid={id + '-select-tooltip'}
       >
         <Menu
           onMenuSelect={name => {
@@ -848,7 +889,7 @@ const rowStyle: CSSProperties = {
   width: '100%',
 };
 
-type TableHandleRef<T extends TableItem = TableItem> = {
+export type TableHandleRef<T extends TableItem = TableItem> = {
   scrollTo: (id: T['id'], alignment?: string) => void;
   scrollToTop: () => void;
   getScrolledItem: () => T['id'];
@@ -873,7 +914,7 @@ export function TableWithNavigator({
 
 type TableItem = { id: number | string };
 
-type TableProps<T extends TableItem = TableItem> = {
+export type TableProps<T extends TableItem = TableItem> = {
   items: T[];
   count?: number;
   headers?: ReactNode | TableHeaderProps['headers'];
@@ -890,14 +931,14 @@ type TableProps<T extends TableItem = TableItem> = {
     position: number;
   }) => ReactNode;
   renderEmpty?: ReactNode | (() => ReactNode);
-  getItemKey?: (index: number) => TableItem['id'];
+  getItemKey?: (index: number) => T['id'];
   loadMore?: () => void;
   style?: CSSProperties;
   navigator?: ReturnType<typeof useTableNavigator<T>>;
-  listRef?: unknown;
+  listContainerRef?: RefObject<HTMLDivElement>;
   onScroll?: () => void;
-  allowPopupsEscape?: boolean;
-  isSelected?: (id: TableItem['id']) => boolean;
+  onKeyDown?: (e: KeyboardEvent) => void;
+  isSelected?: (id: T['id']) => boolean;
   saveScrollWidth?: (parent, child) => void;
 };
 
@@ -918,9 +959,9 @@ export const Table = forwardRef(
       style,
       navigator,
       onScroll,
-      allowPopupsEscape,
       isSelected,
       saveScrollWidth,
+      listContainerRef,
       ...props
     },
     ref,
@@ -936,7 +977,8 @@ export const Table = forwardRef(
 
     const { onEdit, editingId, focusedField, getNavigatorProps } = navigator;
     const list = useRef(null);
-    const listContainer = useRef(null);
+    const listContainerInnerRef = useRef<HTMLDivElement>(null);
+    const listContainer = listContainerRef || listContainerInnerRef;
     const scrollContainer = useRef(null);
     const initialScrollTo = useRef(null);
     const listInitialized = useRef(false);
@@ -1004,14 +1046,18 @@ export const Table = forwardRef(
       }
 
       if (scrollContainer.current && saveScrollWidth) {
-        saveScrollWidth(
-          scrollContainer.current.offsetParent
-            ? scrollContainer.current.offsetParent.clientWidth
-            : 0,
-          scrollContainer.current ? scrollContainer.current.clientWidth : 0,
-        );
+        setTimeout(saveScrollDelayed, 200);
       }
     });
+
+    function saveScrollDelayed() {
+      saveScrollWidth(
+        scrollContainer.current?.offsetParent
+          ? scrollContainer.current?.offsetParent.clientWidth
+          : 0,
+        scrollContainer.current ? scrollContainer.current.clientWidth : 0,
+      );
+    }
 
     function renderRow({ index, style, key }) {
       const item = items[index];
@@ -1038,7 +1084,6 @@ export const Table = forwardRef(
             zIndex: editing || selected ? 101 : 'auto',
             transform: 'translateY(var(--pos))',
           }}
-          // @ts-expect-error not a recognised style attribute
           nativeStyle={{ '--pos': `${style.top - 1}px` }}
           data-focus-key={item.id}
         >
@@ -1134,37 +1179,33 @@ export const Table = forwardRef(
                 }
 
                 return (
-                  <IntersectionBoundary.Provider
-                    value={!allowPopupsEscape && listContainer}
-                  >
-                    <AvoidRefocusScrollProvider>
-                      <FixedSizeList
-                        ref={list}
-                        header={contentHeader}
-                        innerRef={listContainer}
-                        outerRef={scrollContainer}
-                        width={width}
-                        height={height}
-                        renderRow={renderRow}
-                        itemCount={count || items.length}
-                        itemSize={rowHeight - 1}
-                        itemKey={
-                          getItemKey || ((index: number) => items[index].id)
-                        }
-                        indexForKey={key =>
-                          items.findIndex(item => item.id === key)
-                        }
-                        initialScrollOffset={
-                          initialScrollTo.current
-                            ? getScrollOffset(height, initialScrollTo.current)
-                            : 0
-                        }
-                        overscanCount={5}
-                        onItemsRendered={onItemsRendered}
-                        onScroll={onScroll}
-                      />
-                    </AvoidRefocusScrollProvider>
-                  </IntersectionBoundary.Provider>
+                  <AvoidRefocusScrollProvider>
+                    <FixedSizeList
+                      ref={list}
+                      header={contentHeader}
+                      innerRef={listContainer}
+                      outerRef={scrollContainer}
+                      width={width}
+                      height={height}
+                      renderRow={renderRow}
+                      itemCount={count || items.length}
+                      itemSize={rowHeight - 1}
+                      itemKey={
+                        getItemKey || ((index: number) => items[index].id)
+                      }
+                      indexForKey={key =>
+                        items.findIndex(item => item.id === key)
+                      }
+                      initialScrollOffset={
+                        initialScrollTo.current
+                          ? getScrollOffset(height, initialScrollTo.current)
+                          : 0
+                      }
+                      overscanCount={5}
+                      onItemsRendered={onItemsRendered}
+                      onScroll={onScroll}
+                    />
+                  </AvoidRefocusScrollProvider>
                 );
               }}
             </AutoSizer>
@@ -1181,7 +1222,7 @@ export const Table = forwardRef(
 Table.displayName = 'Table';
 
 export type TableNavigator<T extends TableItem> = {
-  onEdit: (id: T['id'], field?: string) => void;
+  onEdit: (id: T['id'] | null, field?: string) => void;
   editingId: T['id'];
   focusedField: string;
   getNavigatorProps: (userProps: object) => object;
@@ -1194,20 +1235,16 @@ export function useTableNavigator<T extends TableItem>(
   const getFields = typeof fields !== 'function' ? () => fields : fields;
   const [editingId, setEditingId] = useState<T['id']>(null);
   const [focusedField, setFocusedField] = useState<string>(null);
-  const containerRef = useRef<HTMLDivElement>();
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // See `onBlur` for why we need this
-  const store = useStore();
-  const modalStackLength = useRef(0);
+  const modalState = useModalState();
+  const modalStackLength = useRef(modalState.modalStack.length);
 
   // onEdit is passed to children, so make sure it maintains identity
-  const onEdit = useCallback((id: T['id'], field?: string) => {
+  const onEdit = useCallback((id: T['id'] | null, field?: string) => {
     setEditingId(id);
     setFocusedField(id ? field : null);
-  }, []);
-
-  useEffect(() => {
-    modalStackLength.current = store.getState().modals.modalStack.length;
   }, []);
 
   function flashInput() {
@@ -1364,7 +1401,7 @@ export function useTableNavigator<T extends TableItem>(
         // modal just opened. This way the field still shows an
         // input, and it will be refocused when the modal closes.
         const prevNumModals = modalStackLength.current;
-        const numModals = store.getState().modals.modalStack.length;
+        const numModals = modalState.modalStack.length;
 
         if (
           document.hasFocus() &&

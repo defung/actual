@@ -1,18 +1,21 @@
-import { type NavigateFunction } from 'react-router-dom';
+import { type NavigateFunction } from 'react-router';
 
-import * as monthUtils from 'loot-core/src/shared/months';
-import { type AccountEntity } from 'loot-core/types/models/account';
-import { type CategoryEntity } from 'loot-core/types/models/category';
-import { type CategoryGroupEntity } from 'loot-core/types/models/category-group';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
+import * as monthUtils from 'loot-core/shared/months';
+import {
+  type AccountEntity,
+  type CategoryEntity,
+  type CategoryGroupEntity,
+  type balanceTypeOpType,
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
-import { ReportOptions } from '../ReportOptions';
+import { ReportOptions } from '@desktop-client/components/reports/ReportOptions';
 
 type showActivityProps = {
   navigate: NavigateFunction;
   categories: { list: CategoryEntity[]; grouped: CategoryGroupEntity[] };
   accounts: AccountEntity[];
-  balanceTypeOp: 'totalAssets' | 'totalDebts' | 'totalTotals';
+  balanceTypeOp: balanceTypeOpType;
   filters: RuleConditionEntity[];
   showHiddenCategories: boolean;
   showOffBudget: boolean;
@@ -50,7 +53,7 @@ export function showActivity({
           'FromDate') as 'dayFromDate' | 'monthFromDate' | 'yearFromDate');
   const isDateOp = interval === 'Weekly' || type !== 'time';
 
-  const conditions = [
+  const filterConditions = [
     ...filters,
     id && { field, op: 'is', value: id, type: 'id' },
     {
@@ -66,8 +69,9 @@ export function showActivity({
       options: { date: true },
     },
     !(
-      balanceTypeOp === 'totalTotals' &&
-      (type === 'totals' || type === 'time')
+      ['netAssets', 'netDebts'].includes(balanceTypeOp) ||
+      (balanceTypeOp === 'totalTotals' &&
+        (type === 'totals' || type === 'time'))
     ) && {
       field: 'amount',
       op: 'gte',
@@ -96,7 +100,7 @@ export function showActivity({
   navigate('/accounts', {
     state: {
       goBack: true,
-      conditions,
+      filterConditions,
     },
   });
 }

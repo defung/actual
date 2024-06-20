@@ -1,16 +1,14 @@
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode, type CSSProperties } from 'react';
 
-import {
-  type GroupedEntity,
-  type DataEntity,
-} from 'loot-core/src/types/models/reports';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { type CSSProperties, theme } from '../../../../style';
-import { View } from '../../../common/View';
-import { Row } from '../../../table';
+import { type GroupedEntity, type DataEntity } from 'loot-core/types/models';
 
 import { RenderTableRow } from './RenderTableRow';
 import { type renderRowProps } from './ReportTable';
+
+import { Row } from '@desktop-client/components/table';
 
 type ReportTableListProps = {
   data: DataEntity;
@@ -38,6 +36,8 @@ export function ReportTableList({
               date: interval.date,
               totalAssets: interval.totalAssets,
               totalDebts: interval.totalDebts,
+              netAssets: interval.netAssets,
+              netDebts: interval.netDebts,
               totalTotals: interval.totalTotals,
               intervalData: [],
               categories: [],

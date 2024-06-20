@@ -1,9 +1,11 @@
 import React from 'react';
 
-import { theme, styles } from '../../style';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
+import { LegendItem } from './LegendItem';
 import { ReportOptions } from './ReportOptions';
 
 type ReportLegendProps = {
@@ -39,33 +41,11 @@ export function ReportLegend({ legend, groupBy, interval }: ReportLegendProps) {
         {legend &&
           legend.map(item => {
             return (
-              <View
+              <LegendItem
                 key={item.name}
-                style={{
-                  padding: 10,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}
-              >
-                <View
-                  style={{
-                    marginRight: 5,
-                    borderRadius: 1000,
-                    width: 14,
-                    height: 14,
-                    backgroundColor: item.color,
-                  }}
-                />
-                <Text
-                  style={{
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    flexShrink: 0,
-                  }}
-                >
-                  {item.name}
-                </Text>
-              </View>
+                color={item.color}
+                label={item.name}
+              />
             );
           })}
       </View>

@@ -1,11 +1,16 @@
-import React, { type MouseEventHandler, type ReactNode } from 'react';
+import React, {
+  type MouseEventHandler,
+  type ReactNode,
+  type ComponentProps,
+} from 'react';
 
-import { type CSSProperties } from '../../style';
-import { Link } from '../common/Link';
-import { View } from '../common/View';
+import { type CSSProperties } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
+
+import { Link } from '@desktop-client/components/common/Link';
 
 type ItemContentProps = {
-  style: CSSProperties;
+  style: ComponentProps<typeof View>['style'];
   to: string;
   onClick: MouseEventHandler<HTMLDivElement>;
   activeStyle: CSSProperties;
@@ -38,7 +43,7 @@ export function ItemContent({
       {children}
     </View>
   ) : (
-    <Link to={to} style={style} activeStyle={activeStyle}>
+    <Link variant="internal" to={to} style={style} activeStyle={activeStyle}>
       {children}
     </Link>
   );

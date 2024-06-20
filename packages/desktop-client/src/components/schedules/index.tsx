@@ -1,70 +1,88 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
-import { useSchedules } from 'loot-core/src/client/data-hooks/schedules';
-import { send } from 'loot-core/src/platform/client/fetch';
-import { type ScheduleEntity } from 'loot-core/src/types/models';
+import { Button } from '@actual-app/components/button';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { useActions } from '../../hooks/useActions';
-import { theme } from '../../style';
-import { Button } from '../common/Button';
-import { Search } from '../common/Search';
-import { View } from '../common/View';
-import { Page } from '../Page';
+import { send } from 'loot-core/platform/client/fetch';
+import { q } from 'loot-core/shared/query';
+import { type ScheduleEntity } from 'loot-core/types/models';
 
-import { SchedulesTable, type ScheduleItemAction } from './SchedulesTable';
+import { type ScheduleItemAction, SchedulesTable } from './SchedulesTable';
+
+import { Search } from '@desktop-client/components/common/Search';
+import { Page } from '@desktop-client/components/Page';
+import { useSchedules } from '@desktop-client/hooks/useSchedules';
+import { pushModal } from '@desktop-client/modals/modalsSlice';
+import { useDispatch } from '@desktop-client/redux';
 
 export function Schedules() {
-  const { pushModal } = useActions();
+  const { t } = useTranslation();
+
+  const dispatch = useDispatch();
   const [filter, setFilter] = useState('');
 
-  const scheduleData = useSchedules();
+  const onEdit = useCallback(
+    (id: ScheduleEntity['id']) => {
+      dispatch(
+        pushModal({ modal: { name: 'schedule-edit', options: { id } } }),
+      );
+    },
+    [dispatch],
+  );
 
-  if (scheduleData == null) {
-    return null;
-  }
+  const onAdd = useCallback(() => {
+    dispatch(pushModal({ modal: { name: 'schedule-edit', options: {} } }));
+  }, [dispatch]);
 
-  const { schedules, statuses } = scheduleData;
+  const onDiscover = useCallback(() => {
+    dispatch(pushModal({ modal: { name: 'schedules-discover' } }));
+  }, [dispatch]);
 
-  function onEdit(id: ScheduleEntity['id']) {
-    pushModal('schedule-edit', { id });
-  }
+  const onChangeUpcomingLength = useCallback(() => {
+    dispatch(pushModal({ modal: { name: 'schedules-upcoming-length' } }));
+  }, [dispatch]);
 
-  function onAdd() {
-    pushModal('schedule-edit');
-  }
+  const onAction = useCallback(
+    async (name: ScheduleItemAction, id: ScheduleEntity['id']) => {
+      switch (name) {
+        case 'post-transaction':
+          await send('schedule/post-transaction', { id });
+          break;
+        case 'skip':
+          await send('schedule/skip-next-date', { id });
+          break;
+        case 'complete':
+          await send('schedule/update', {
+            schedule: { id, completed: true },
+          });
+          break;
+        case 'restart':
+          await send('schedule/update', {
+            schedule: { id, completed: false },
+            resetNextDate: true,
+          });
+          break;
+        case 'delete':
+          await send('schedule/delete', { id });
+          break;
+        default:
+          throw new Error(`Unknown action: ${name}`);
+      }
+    },
+    [],
+  );
 
-  function onDiscover() {
-    pushModal('schedules-discover');
-  }
-
-  async function onAction(name: ScheduleItemAction, id: ScheduleEntity['id']) {
-    switch (name) {
-      case 'post-transaction':
-        await send('schedule/post-transaction', { id });
-        break;
-      case 'skip':
-        await send('schedule/skip-next-date', { id });
-        break;
-      case 'complete':
-        await send('schedule/update', {
-          schedule: { id, completed: true },
-        });
-        break;
-      case 'restart':
-        await send('schedule/update', {
-          schedule: { id, completed: false },
-          resetNextDate: true,
-        });
-        break;
-      case 'delete':
-        await send('schedule/delete', { id });
-        break;
-      default:
-    }
-  }
+  const schedulesQuery = useMemo(() => q('schedules').select('*'), []);
+  const {
+    isLoading: isSchedulesLoading,
+    schedules,
+    statuses,
+  } = useSchedules({ query: schedulesQuery });
 
   return (
-    <Page header="Schedules">
+    <Page header={t('Schedules')}>
       <View
         style={{
           flexDirection: 'row',
@@ -80,7 +98,7 @@ export function Schedules() {
           }}
         >
           <Search
-            placeholder="Filter schedules…"
+            placeholder={t('Filter schedules…')}
             value={filter}
             onChange={setFilter}
           />
@@ -88,6 +106,7 @@ export function Schedules() {
       </View>
 
       <SchedulesTable
+        isLoading={isSchedulesLoading}
         schedules={schedules}
         filter={filter}
         statuses={statuses}
@@ -105,9 +124,22 @@ export function Schedules() {
           flexShrink: 0,
         }}
       >
-        <Button onClick={onDiscover}>Find schedules</Button>
-        <Button type="primary" onClick={onAdd}>
-          Add new schedule
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: '1em',
+          }}
+        >
+          <Button onPress={onDiscover}>
+            <Trans>Find schedules</Trans>
+          </Button>
+          <Button onPress={onChangeUpcomingLength}>
+            <Trans>Change upcoming length</Trans>
+          </Button>
+        </View>
+        <Button variant="primary" onPress={onAdd}>
+          <Trans>Add new schedule</Trans>
         </Button>
       </View>
     </Page>

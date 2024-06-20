@@ -1,35 +1,36 @@
 // @ts-strict-ignore
 import React, {
-  useState,
-  useRef,
-  useEffect,
-  useMemo,
   type ComponentProps,
   type HTMLProps,
-  type ReactNode,
   type KeyboardEvent,
-  type ChangeEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from 'react';
 
+import { Button } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { SvgRemove } from '@actual-app/components/icons/v2';
+import { Input } from '@actual-app/components/input';
+import { Popover } from '@actual-app/components/popover';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { css, cx } from '@emotion/css';
 import Downshift, { type StateChangeTypes } from 'downshift';
-import { css } from 'glamor';
 
-import { SvgRemove } from '../../icons/v2';
-import { useResponsive } from '../../ResponsiveProvider';
-import { theme, styles } from '../../style';
-import { Button } from '../common/Button';
-import { Input } from '../common/Input';
-import { Popover } from '../common/Popover';
-import { View } from '../common/View';
+import { getNormalisedString } from 'loot-core/shared/normalisation';
+
+import { useProperFocus } from '@desktop-client/hooks/useProperFocus';
 
 type CommonAutocompleteProps<T extends Item> = {
   focused?: boolean;
   embedded?: boolean;
   containerProps?: HTMLProps<HTMLDivElement>;
   labelProps?: { id?: string };
-  inputProps?: Omit<ComponentProps<typeof Input>, 'onChange'> & {
-    onChange?: (value: string) => void;
-  };
+  inputProps?: ComponentProps<typeof Input>;
   suggestions?: T[];
   renderInput?: (props: ComponentProps<typeof Input>) => ReactNode;
   renderItems?: (
@@ -49,6 +50,7 @@ type CommonAutocompleteProps<T extends Item> = {
   clearOnBlur?: boolean;
   clearOnSelect?: boolean;
   closeOnBlur?: boolean;
+  closeOnSelect?: boolean;
   onClose?: () => void;
 };
 
@@ -92,16 +94,8 @@ export function defaultFilterSuggestion<T extends Item>(
   suggestion: T,
   value: string,
 ) {
-  return getItemName(suggestion)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .includes(
-      value
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, ''),
-    );
+  const name = getItemName(suggestion);
+  return getNormalisedString(name).includes(getNormalisedString(value));
 }
 
 function defaultFilterSuggestions<T extends Item>(
@@ -145,7 +139,8 @@ function fireUpdate<T extends Item>(
 }
 
 function defaultRenderInput(props: ComponentProps<typeof Input>) {
-  return <Input {...props} />;
+  // data-1p-ignore disables 1Password autofill behaviour
+  return <Input data-1p-ignore {...props} />;
 }
 
 function defaultRenderItems<T extends Item>(
@@ -183,14 +178,14 @@ function defaultRenderItems<T extends Item>(
             // * https://github.com/WebKit/WebKit/blob/58956cf59ba01267644b5e8fe766efa7aa6f0c5c/Source/WebKit/WebProcess/WebPage/ios/WebPageIOS.mm#L783
             role="button"
             key={name}
-            className={`${css({
+            className={css({
               padding: 5,
               cursor: 'default',
               backgroundColor:
                 highlightedIndex === index
                   ? theme.menuAutoCompleteBackgroundHover
-                  : null,
-            })}`}
+                  : undefined,
+            })}
           >
             {name}
           </div>
@@ -235,6 +230,7 @@ function SingleAutocomplete<T extends Item>({
   clearOnBlur = true,
   clearOnSelect = false,
   closeOnBlur = true,
+  closeOnSelect = !clearOnSelect,
   onClose,
   value: initialValue,
 }: SingleAutocompleteProps<T>) {
@@ -259,6 +255,7 @@ function SingleAutocomplete<T extends Item>({
   };
 
   const triggerRef = useRef(null);
+  const itemsViewRef = useRef(null);
 
   const { isNarrowWidth } = useResponsive();
   const narrowInputStyle = isNarrowWidth
@@ -301,6 +298,8 @@ function SingleAutocomplete<T extends Item>({
   }
 
   const filtered = isChanged ? filteredSuggestions || suggestions : suggestions;
+  const inputRef = useRef(null);
+  useProperFocus(inputRef, focused);
 
   return (
     <Downshift
@@ -310,7 +309,9 @@ function SingleAutocomplete<T extends Item>({
 
         if (clearOnSelect) {
           setValue('');
-        } else {
+        }
+
+        if (closeOnSelect) {
           close();
         }
 
@@ -352,6 +353,7 @@ function SingleAutocomplete<T extends Item>({
             Downshift.stateChangeTypes.controlledPropUpdatedSelectedItem,
             // Do nothing if it is a "touch" selection event
             Downshift.stateChangeTypes.touchEnd,
+            Downshift.stateChangeTypes.mouseUp,
             // @ts-expect-error Types say there is no type
           ].includes(changes.type)
         ) {
@@ -399,7 +401,8 @@ function SingleAutocomplete<T extends Item>({
       onStateChange={changes => {
         if (
           !clearOnBlur &&
-          changes.type === Downshift.stateChangeTypes.mouseUp
+          (changes.type === Downshift.stateChangeTypes.mouseUp ||
+            changes.type === Downshift.stateChangeTypes.touchEnd)
         ) {
           return;
         }
@@ -448,11 +451,14 @@ function SingleAutocomplete<T extends Item>({
         // Super annoying but it works best to return a div so we
         // can't use a View here, but we can fake it be using the
         // className
-        <div className={`view ${css({ display: 'flex' })}`} {...containerProps}>
+        <div
+          className={cx('view', css({ display: 'flex' }))}
+          {...containerProps}
+        >
           <View ref={triggerRef} style={{ flexShrink: 0 }}>
             {renderInput(
               getInputProps({
-                focused,
+                ref: inputRef,
                 ...inputProps,
                 onFocus: e => {
                   inputProps.onFocus?.(e);
@@ -466,7 +472,15 @@ function SingleAutocomplete<T extends Item>({
                   e['preventDownshiftDefault'] = true;
                   inputProps.onBlur?.(e);
 
-                  if (!closeOnBlur) return;
+                  if (!closeOnBlur) {
+                    return;
+                  }
+
+                  if (itemsViewRef.current?.contains(e.relatedTarget)) {
+                    // Do not close when the user clicks on any of the items.
+                    e.stopPropagation();
+                    return;
+                  }
 
                   if (clearOnBlur) {
                     if (e.target.value === '') {
@@ -551,10 +565,6 @@ function SingleAutocomplete<T extends Item>({
                     }
                   }
                 },
-                onChange: (e: ChangeEvent<HTMLInputElement>) => {
-                  const { onChange } = inputProps || {};
-                  onChange?.(e.target.value);
-                },
               }),
             )}
           </View>
@@ -562,6 +572,7 @@ function SingleAutocomplete<T extends Item>({
             filtered.length > 0 &&
             (embedded ? (
               <View
+                ref={itemsViewRef}
                 style={{ ...styles.darkScrollbar, marginTop: 5 }}
                 data-testid="autocomplete"
               >
@@ -582,6 +593,7 @@ function SingleAutocomplete<T extends Item>({
                 isNonModal
                 style={{
                   ...styles.darkScrollbar,
+                  ...styles.popover,
                   backgroundColor: theme.menuAutoCompleteBackground,
                   color: theme.menuAutoCompleteText,
                   minWidth: 200,
@@ -589,12 +601,14 @@ function SingleAutocomplete<T extends Item>({
                 }}
                 data-testid="autocomplete"
               >
-                {renderItems(
-                  filtered,
-                  getItemProps,
-                  highlightedIndex,
-                  inputValue,
-                )}
+                <View ref={itemsViewRef}>
+                  {renderItems(
+                    filtered,
+                    getItemProps,
+                    highlightedIndex,
+                    inputValue,
+                  )}
+                </View>
               </Popover>
             ))}
         </div>
@@ -621,12 +635,19 @@ function MultiItem({ name, onRemove }: MultiItemProps) {
       }}
     >
       {name}
-      <Button type="bare" style={{ marginLeft: 1 }} onClick={onRemove}>
+      <Button variant="bare" style={{ marginLeft: 1 }} onPress={onRemove}>
         <SvgRemove style={{ width: 8, height: 8 }} />
       </Button>
     </View>
   );
 }
+
+const defaultMultiAutocompleteInputClassName = css({
+  flex: 1,
+  minWidth: 30,
+  border: 0,
+  '&[data-focused]': { border: 0, boxShadow: 'none' },
+});
 
 type MultiAutocompleteProps<T extends Item> = CommonAutocompleteProps<T> & {
   type: 'multi';
@@ -644,16 +665,18 @@ function MultiAutocomplete<T extends Item>({
 }: MultiAutocompleteProps<T>) {
   const [focused, setFocused] = useState(false);
   const selectedItemIds = selectedItems.map(getItemId);
+  const inputRef = useRef(null);
+  useProperFocus(inputRef, focused);
 
   function onRemoveItem(id: T['id']) {
     const items = selectedItemIds.filter(i => i !== id);
     onSelect(items);
   }
 
-  function onAddItem(id: T['id']) {
+  function onAddItem(id: T['id'], value: string) {
     if (id) {
       id = id.trim();
-      onSelect([...selectedItemIds, id], id);
+      onSelect([...selectedItemIds, id], value);
     }
   }
 
@@ -681,7 +704,7 @@ function MultiAutocomplete<T extends Item>({
       onSelect={onAddItem}
       highlightFirst
       strict={strict}
-      renderInput={inputProps => (
+      renderInput={({ className: inputClassName, ...inputProps }) => (
         <View
           style={{
             display: 'flex',
@@ -711,6 +734,7 @@ function MultiAutocomplete<T extends Item>({
           })}
           <Input
             {...inputProps}
+            ref={inputRef}
             onKeyDown={e => onKeyDown(e, inputProps.onKeyDown)}
             onFocus={e => {
               setFocused(true);
@@ -720,13 +744,15 @@ function MultiAutocomplete<T extends Item>({
               setFocused(false);
               inputProps.onBlur(e);
             }}
-            style={{
-              flex: 1,
-              minWidth: 30,
-              border: 0,
-              ':focus': { border: 0, boxShadow: 'none' },
-              ...inputProps.style,
-            }}
+            className={
+              typeof inputClassName === 'function'
+                ? renderProps =>
+                    cx(
+                      defaultMultiAutocompleteInputClassName,
+                      inputClassName(renderProps),
+                    )
+                : cx(defaultMultiAutocompleteInputClassName, inputClassName)
+            }
           />
         </View>
       )}
@@ -739,6 +765,7 @@ type AutocompleteFooterProps = {
   embedded?: boolean;
   children: ReactNode;
 };
+
 export function AutocompleteFooter({
   show = true,
   embedded,
@@ -754,7 +781,6 @@ export function AutocompleteFooter({
         flexShrink: 0,
         ...(embedded ? { paddingTop: 5 } : { padding: 5 }),
       }}
-      onMouseDown={e => e.preventDefault()}
     >
       {children}
     </View>

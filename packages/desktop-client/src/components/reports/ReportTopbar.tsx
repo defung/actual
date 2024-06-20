@@ -1,7 +1,5 @@
-import React from 'react';
-
-import { type CustomReportEntity } from 'loot-core/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
+import React, { type ComponentProps } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   SvgCalculator,
@@ -11,15 +9,26 @@ import {
   SvgListBullet,
   SvgQueue,
   SvgTag,
-} from '../../icons/v1';
-import { SvgChartArea } from '../../icons/v1/ChartArea';
-import { theme } from '../../style';
-import { View } from '../common/View';
-import { FilterButton } from '../filters/FiltersMenu';
+  SvgCamera,
+  SvgChartArea,
+} from '@actual-app/components/icons/v1';
+import { SpaceBetween } from '@actual-app/components/space-between';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { toPng } from 'html-to-image';
+
+import * as monthUtils from 'loot-core/shared/months';
+import {
+  type CustomReportEntity,
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { GraphButton } from './GraphButton';
 import { SaveReport } from './SaveReport';
 import { setSessionReport } from './setSessionReport';
+import { SnapshotButton } from './SnapshotButton';
+
+import { FilterButton } from '@desktop-client/components/filters/FiltersMenu';
 
 type ReportTopbarProps = {
   customReportItems: CustomReportEntity;
@@ -31,13 +40,7 @@ type ReportTopbarProps = {
   viewLabels: boolean;
   onApplyFilter: (newFilter: RuleConditionEntity) => void;
   onChangeViews: (viewType: string) => void;
-  onReportChange: ({
-    savedReport,
-    type,
-  }: {
-    savedReport?: CustomReportEntity;
-    type: string;
-  }) => void;
+  onReportChange: ComponentProps<typeof SaveReport>['onReportChange'];
   isItemDisabled: (type: string) => boolean;
   defaultItems: (item: string) => void;
 };
@@ -56,11 +59,26 @@ export function ReportTopbar({
   isItemDisabled,
   defaultItems,
 }: ReportTopbarProps) {
+  const { t } = useTranslation();
   const onChangeGraph = (cond: string) => {
     setSessionReport('graphType', cond);
     onReportChange({ type: 'modify' });
     setGraphType(cond);
     defaultItems(cond);
+  };
+
+  const downloadSnapshot = async () => {
+    const reportElement = document.getElementById('custom-report-content');
+    const title = report.name;
+    if (reportElement) {
+      const dataUrl = await toPng(reportElement);
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `${monthUtils.currentDay()} - ${title}.png`;
+      link.click();
+    } else {
+      console.error('Report container not found.');
+    }
   };
 
   return (
@@ -70,11 +88,12 @@ export function ReportTopbar({
         alignItems: 'center',
         marginBottom: 10,
         flexShrink: 0,
+        overflowY: 'auto',
       }}
     >
       <GraphButton
         selected={customReportItems.graphType === 'TableGraph'}
-        title="Data Table"
+        title={t('Data Table')}
         onSelect={() => {
           onChangeGraph('TableGraph');
         }}
@@ -85,7 +104,9 @@ export function ReportTopbar({
       </GraphButton>
       <GraphButton
         title={
-          customReportItems.mode === 'total' ? 'Bar Graph' : 'Stacked Bar Graph'
+          customReportItems.mode === 'total'
+            ? t('Bar Graph')
+            : t('Stacked Bar Graph')
         }
         selected={
           customReportItems.graphType === 'BarGraph' ||
@@ -104,7 +125,7 @@ export function ReportTopbar({
         <SvgChartBar width={15} height={15} />
       </GraphButton>
       <GraphButton
-        title="Line Graph"
+        title={t('Line Graph')}
         selected={customReportItems.graphType === 'LineGraph'}
         onSelect={() => {
           onChangeGraph('LineGraph');
@@ -115,7 +136,7 @@ export function ReportTopbar({
         <SvgChart width={15} height={15} />
       </GraphButton>
       <GraphButton
-        title="Area Graph"
+        title={t('Area Graph')}
         selected={customReportItems.graphType === 'AreaGraph'}
         onSelect={() => {
           onChangeGraph('AreaGraph');
@@ -126,7 +147,7 @@ export function ReportTopbar({
         <SvgChartArea width={15} height={15} />
       </GraphButton>
       <GraphButton
-        title="Donut Graph"
+        title={t('Donut Graph')}
         selected={customReportItems.graphType === 'DonutGraph'}
         onSelect={() => {
           onChangeGraph('DonutGraph');
@@ -151,7 +172,7 @@ export function ReportTopbar({
           onChangeViews('viewLegend');
         }}
         style={{ marginRight: 15 }}
-        title="Show Legend"
+        title={t('Show Legend')}
         disabled={isItemDisabled('ShowLegend')}
       >
         <SvgListBullet width={15} height={15} />
@@ -162,7 +183,7 @@ export function ReportTopbar({
           onChangeViews('viewSummary');
         }}
         style={{ marginRight: 15 }}
-        title="Show Summary"
+        title={t('Show Summary')}
       >
         <SvgCalculator width={15} height={15} />
       </GraphButton>
@@ -172,7 +193,7 @@ export function ReportTopbar({
           onChangeViews('viewLabels');
         }}
         style={{ marginRight: 15 }}
-        title="Show Labels"
+        title={t('Show Labels')}
         disabled={isItemDisabled('ShowLabels')}
       >
         <SvgTag width={15} height={15} />
@@ -185,27 +206,50 @@ export function ReportTopbar({
           marginRight: 15,
           flexShrink: 0,
         }}
-      />{' '}
-      <FilterButton
-        compact
-        hover
-        onApply={(e: RuleConditionEntity) => {
-          setSessionReport('conditions', [
-            ...(customReportItems.conditions ?? []),
-            e,
-          ]);
-          onApplyFilter(e);
-          onReportChange({ type: 'modify' });
+      />
+      <SnapshotButton
+        style={{ marginRight: 15 }}
+        title={t('Download Snapshot')}
+        onSelect={downloadSnapshot}
+      >
+        <SvgCamera width={15} height={15} />
+      </SnapshotButton>
+      <View
+        style={{
+          width: 1,
+          height: 30,
+          backgroundColor: theme.pillBorderDark,
+          marginRight: 15,
+          flexShrink: 0,
         }}
-        exclude={[]}
       />
-      <View style={{ flex: 1 }} />
-      <SaveReport
-        customReportItems={customReportItems}
-        report={report}
-        savedStatus={savedStatus}
-        onReportChange={onReportChange}
-      />
+      <SpaceBetween
+        style={{
+          flexWrap: 'nowrap',
+          justifyContent: 'space-between',
+          flex: 1,
+        }}
+      >
+        <FilterButton
+          compact
+          hover
+          onApply={(e: RuleConditionEntity) => {
+            setSessionReport('conditions', [
+              ...(customReportItems.conditions ?? []),
+              e,
+            ]);
+            onApplyFilter(e);
+            onReportChange({ type: 'modify' });
+          }}
+          exclude={[]}
+        />
+        <SaveReport
+          customReportItems={customReportItems}
+          report={report}
+          savedStatus={savedStatus}
+          onReportChange={onReportChange}
+        />
+      </SpaceBetween>
     </View>
   );
 }

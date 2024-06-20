@@ -1,34 +1,39 @@
-import React, { type ComponentPropsWithoutRef } from 'react';
+import React from 'react';
+import { useTranslation } from 'react-i18next';
 
-import * as monthUtils from 'loot-core/src/shared/months';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { useResponsive } from '../../ResponsiveProvider';
-import { theme } from '../../style';
-import { CategoryAutocomplete } from '../autocomplete/CategoryAutocomplete';
-import { ModalCloseButton, Modal, ModalTitle } from '../common/Modal';
-import { View } from '../common/View';
-import { SectionLabel } from '../forms';
-import { type CommonModalProps } from '../Modals';
-import { NamespaceContext } from '../spreadsheet/NamespaceContext';
+import * as monthUtils from 'loot-core/shared/months';
 
-type CategoryAutocompleteModalProps = {
-  modalProps: CommonModalProps;
-  autocompleteProps: ComponentPropsWithoutRef<typeof CategoryAutocomplete>;
-  onClose: () => void;
-  month?: string;
-};
+import { CategoryAutocomplete } from '@desktop-client/components/autocomplete/CategoryAutocomplete';
+import {
+  ModalCloseButton,
+  Modal,
+  ModalTitle,
+  ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import { SectionLabel } from '@desktop-client/components/forms';
+import { SheetNameProvider } from '@desktop-client/hooks/useSheetName';
+import { type Modal as ModalType } from '@desktop-client/modals/modalsSlice';
+
+type CategoryAutocompleteModalProps = Extract<
+  ModalType,
+  { name: 'category-autocomplete' }
+>['options'];
 
 export function CategoryAutocompleteModal({
-  modalProps,
-  autocompleteProps,
+  title,
   month,
+  onSelect,
+  categoryGroups,
+  showHiddenCategories,
+  closeOnSelect,
+  clearOnSelect,
   onClose,
 }: CategoryAutocompleteModalProps) {
-  const _onClose = () => {
-    modalProps.onClose();
-    onClose?.();
-  };
-
+  const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
 
   const defaultAutocompleteProps = {
@@ -37,56 +42,69 @@ export function CategoryAutocompleteModal({
 
   return (
     <Modal
-      title={
-        <ModalTitle
-          title="Category"
-          getStyle={() => ({ color: theme.menuAutoCompleteText })}
-        />
-      }
+      name="category-autocomplete"
       noAnimation={!isNarrowWidth}
-      showHeader={isNarrowWidth}
-      focusAfterClose={false}
-      {...modalProps}
-      onClose={_onClose}
-      style={{
-        height: isNarrowWidth ? '85vh' : 275,
-        backgroundColor: theme.menuAutoCompleteBackground,
+      onClose={onClose}
+      containerProps={{
+        style: {
+          height: isNarrowWidth
+            ? 'calc(var(--visual-viewport-height) * 0.85)'
+            : 275,
+          backgroundColor: theme.menuAutoCompleteBackground,
+        },
       }}
-      CloseButton={props => (
-        <ModalCloseButton
-          {...props}
-          style={{ color: theme.menuAutoCompleteText }}
-        />
-      )}
     >
-      {() => (
-        <View>
-          {!isNarrowWidth && (
-            <SectionLabel
-              title="Category"
-              style={{
-                alignSelf: 'center',
-                color: theme.menuAutoCompleteText,
-                marginBottom: 10,
-              }}
+      {({ state: { close } }) => (
+        <>
+          {isNarrowWidth && (
+            <ModalHeader
+              title={
+                <ModalTitle
+                  title={title || t('Category')}
+                  getStyle={() => ({ color: theme.menuAutoCompleteText })}
+                />
+              }
+              rightContent={
+                <ModalCloseButton
+                  onPress={close}
+                  style={{ color: theme.menuAutoCompleteText }}
+                />
+              }
             />
           )}
-          <View style={{ flex: 1 }}>
-            <NamespaceContext.Provider
-              value={month ? monthUtils.sheetForMonth(month) : ''}
-            >
-              <CategoryAutocomplete
-                focused={true}
-                embedded={true}
-                closeOnBlur={false}
-                showSplitOption={false}
-                onClose={_onClose}
-                {...defaultAutocompleteProps}
-                {...autocompleteProps}
+          <View>
+            {!isNarrowWidth && (
+              <SectionLabel
+                title={t('Category')}
+                style={{
+                  alignSelf: 'center',
+                  color: theme.menuAutoCompleteText,
+                  marginBottom: 10,
+                }}
               />
-            </NamespaceContext.Provider>
+            )}
+            <View style={{ flex: 1 }}>
+              <SheetNameProvider
+                name={month ? monthUtils.sheetForMonth(month) : ''}
+              >
+                <CategoryAutocomplete
+                  focused={true}
+                  embedded={true}
+                  closeOnBlur={false}
+                  closeOnSelect={closeOnSelect}
+                  clearOnSelect={clearOnSelect}
+                  showSplitOption={false}
+                  onClose={close}
+                  {...defaultAutocompleteProps}
+                  onSelect={onSelect}
+                  categoryGroups={categoryGroups}
+                  showHiddenCategories={showHiddenCategories}
+                  value={null}
+                />
+              </SheetNameProvider>
+            </View>
           </View>
-        </View>
+        </>
       )}
     </Modal>
   );

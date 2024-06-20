@@ -7,19 +7,19 @@ import React, {
 } from 'react';
 import { useSpring, animated } from 'react-spring';
 
-import { css } from 'glamor';
+import { View } from '@actual-app/components/view';
+import { css } from '@emotion/css';
 
-import { addMonths, subMonths } from 'loot-core/src/shared/months';
+import { addMonths, subMonths } from 'loot-core/shared/months';
 
-import { useResizeObserver } from '../../hooks/useResizeObserver';
-import { View } from '../common/View';
-
+import { type BudgetSummary as EnvelopeBudgetSummary } from './envelope/budgetsummary/BudgetSummary';
 import { MonthsContext } from './MonthsContext';
-import { type BudgetSummary as ReportBudgetSummary } from './report/budgetsummary/BudgetSummary';
-import { type BudgetSummary as RolloverBudgetSummary } from './rollover/budgetsummary/BudgetSummary';
+import { type BudgetSummary as TrackingBudgetSummary } from './tracking/budgetsummary/BudgetSummary';
+
+import { useResizeObserver } from '@desktop-client/hooks/useResizeObserver';
 
 type BudgetSummariesProps = {
-  SummaryComponent: typeof ReportBudgetSummary | typeof RolloverBudgetSummary;
+  SummaryComponent: typeof TrackingBudgetSummary | typeof EnvelopeBudgetSummary;
 };
 
 export function BudgetSummaries({ SummaryComponent }: BudgetSummariesProps) {
@@ -31,7 +31,7 @@ export function BudgetSummaries({ SummaryComponent }: BudgetSummariesProps) {
     config: { mass: 3, tension: 600, friction: 80 },
   }));
 
-  const containerRef = useResizeObserver(
+  const containerRef = useResizeObserver<HTMLDivElement>(
     useCallback(rect => {
       setWidthState(rect.width);
     }, []),
@@ -67,13 +67,13 @@ export function BudgetSummaries({ SummaryComponent }: BudgetSummariesProps) {
 
   return (
     <div
-      className={`${css([
+      className={css([
         { flex: 1, overflow: 'hidden' },
         months.length === 1 && {
           marginLeft: -4,
           marginRight: -4,
         },
-      ])}`}
+      ])}
       ref={containerRef}
     >
       <animated.div

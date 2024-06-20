@@ -1,24 +1,28 @@
 import React from 'react';
-import { useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 
-import { type State } from 'loot-core/src/client/state-types';
+import { Button } from '@actual-app/components/button';
+import { SvgClose } from '@actual-app/components/icons/v1';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { useActions } from '../hooks/useActions';
-import { SvgClose } from '../icons/v1';
-import { theme } from '../style';
-
-import { Button } from './common/Button';
 import { Link } from './common/Link';
-import { Text } from './common/Text';
-import { View } from './common/View';
+
+import { setAppState, updateApp } from '@desktop-client/app/appSlice';
+import { useSelector, useDispatch } from '@desktop-client/redux';
 
 export function UpdateNotification() {
-  const updateInfo = useSelector((state: State) => state.app.updateInfo);
+  const { t } = useTranslation();
+  const updateInfo = useSelector(state => state.app.updateInfo);
   const showUpdateNotification = useSelector(
-    (state: State) => state.app.showUpdateNotification,
+    state => state.app.showUpdateNotification,
   );
 
-  const { updateApp, setAppState } = useActions();
+  const dispatch = useDispatch();
+  const onRestart = () => {
+    dispatch(updateApp());
+  };
 
   if (updateInfo && showUpdateNotification) {
     const notes = updateInfo.releaseNotes;
@@ -40,20 +44,22 @@ export function UpdateNotification() {
       >
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ marginRight: 10, fontWeight: 700 }}>
-            <Text>App updated to {updateInfo.version}</Text>
+            <Text>
+              {t('App updated to {{version}}', { version: updateInfo.version })}
+            </Text>
           </View>
           <View style={{ flex: 1 }} />
           <View style={{ marginTop: -1 }}>
             <Text>
               <Link
                 variant="text"
-                onClick={updateApp}
+                onClick={onRestart}
                 style={{
                   color: theme.buttonPrimaryText,
                   textDecoration: 'underline',
                 }}
               >
-                Restart
+                {t('Restart')}
               </Link>{' '}
               (
               <Link
@@ -63,24 +69,26 @@ export function UpdateNotification() {
                   textDecoration: 'underline',
                 }}
                 onClick={() =>
-                  window.Actual?.openURLInBrowser(
+                  window.Actual.openURLInBrowser(
                     'https://actualbudget.org/docs/releases',
                   )
                 }
               >
-                notes
+                {t('notes')}
               </Link>
               )
               <Button
-                type="bare"
-                aria-label="Close"
+                variant="bare"
+                aria-label={t('Close')}
                 style={{ display: 'inline', padding: '1px 7px 2px 7px' }}
-                onClick={() => {
+                onPress={() => {
                   // Set a flag to never show an update notification again for this session
-                  setAppState({
-                    updateInfo: null,
-                    showUpdateNotification: false,
-                  });
+                  dispatch(
+                    setAppState({
+                      updateInfo: null,
+                      showUpdateNotification: false,
+                    }),
+                  );
                 }}
               >
                 <SvgClose

@@ -6,9 +6,11 @@ node_modules
 # testing
 coverage
 test-results
+playwright-report
 
 # production
 build
+build-electron
 build-stats
 stats.json
 
@@ -23,3 +25,6 @@ public/kcab
 public/data
 public/data-file-index.txt
 public/*.wasm
+
+# translations
+locale/

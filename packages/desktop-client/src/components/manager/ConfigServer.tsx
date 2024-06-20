@@ -1,26 +1,290 @@
 // @ts-strict-ignore
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
+
+import { Button, ButtonWithLoading } from '@actual-app/components/button';
+import { BigInput } from '@actual-app/components/input';
+import { Label } from '@actual-app/components/label';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { css } from '@emotion/css';
 
 import {
   isNonProductionEnvironment,
   isElectron,
-} from 'loot-core/src/shared/environment';
-
-import { useActions } from '../../hooks/useActions';
-import { useNavigate } from '../../hooks/useNavigate';
-import { useSetThemeColor } from '../../hooks/useSetThemeColor';
-import { theme } from '../../style';
-import { Button, ButtonWithLoading } from '../common/Button';
-import { BigInput } from '../common/Input';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { useServerURL, useSetServerURL } from '../ServerContext';
+} from 'loot-core/shared/environment';
 
 import { Title } from './subscribe/common';
 
+import { createBudget } from '@desktop-client/budgets/budgetsSlice';
+import { Link } from '@desktop-client/components/common/Link';
+import {
+  useServerURL,
+  useSetServerURL,
+} from '@desktop-client/components/ServerContext';
+import { useGlobalPref } from '@desktop-client/hooks/useGlobalPref';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
+import { saveGlobalPrefs } from '@desktop-client/prefs/prefsSlice';
+import { useDispatch } from '@desktop-client/redux';
+import { loggedIn, signOut } from '@desktop-client/users/usersSlice';
+
+export function ElectronServerConfig({
+  onDoNotUseServer,
+  onSetServerConfigView,
+}: {
+  onDoNotUseServer: () => void;
+  onSetServerConfigView: (view: 'internal' | 'external') => void;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const setServerUrl = useSetServerURL();
+  const currentUrl = useServerURL();
+  const dispatch = useDispatch();
+
+  const [syncServerConfig, setSyncServerConfig] =
+    useGlobalPref('syncServerConfig');
+
+  const [electronServerPort, setElectronServerPort] = useState(
+    syncServerConfig?.port || 5007,
+  );
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  const canShowExternalServerConfig = !syncServerConfig?.port && !currentUrl;
+  const hasInternalServerConfig = syncServerConfig?.port;
+
+  const [startingSyncServer, setStartingSyncServer] = useState(false);
+
+  const onConfigureSyncServer = async () => {
+    if (
+      isNaN(electronServerPort) ||
+      electronServerPort <= 0 ||
+      electronServerPort > 65535
+    ) {
+      setConfigError('Ports must be within range 1 - 65535');
+      return;
+    }
+
+    try {
+      setConfigError(null);
+      setStartingSyncServer(true);
+      // Ensure config is saved before starting the server
+      await dispatch(
+        saveGlobalPrefs({
+          prefs: {
+            syncServerConfig: {
+              ...syncServerConfig,
+              port: electronServerPort,
+              autoStart: true,
+            },
+          },
+        }),
+      ).unwrap();
+
+      await window.globalThis.Actual.stopSyncServer();
+      await window.globalThis.Actual.startSyncServer();
+      setStartingSyncServer(false);
+      initElectronSyncServerRunningStatus();
+      await setServerUrl(`http://localhost:${electronServerPort}`);
+      navigate('/');
+    } catch (error) {
+      setStartingSyncServer(false);
+      setConfigError('Failed to configure sync server');
+      console.error('Failed to configure sync server:', error);
+    }
+  };
+
+  const [electronSyncServerRunning, setElectronSyncServerRunning] =
+    useState(false);
+
+  const initElectronSyncServerRunningStatus = async () => {
+    setElectronSyncServerRunning(
+      await window.globalThis.Actual.isSyncServerRunning(),
+    );
+  };
+
+  useEffect(() => {
+    initElectronSyncServerRunningStatus();
+  }, []);
+
+  async function dontUseSyncServer() {
+    setSyncServerConfig(null);
+
+    if (electronSyncServerRunning) {
+      await window.globalThis.Actual.stopSyncServer();
+    }
+
+    onDoNotUseServer();
+  }
+
+  return (
+    <>
+      <Title text={t('Configure your server')} />
+      <View
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 20,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 16,
+            color: theme.pageText,
+            lineHeight: 1.5,
+          }}
+        >
+          <Trans>
+            Set up your server below to enable seamless data synchronization
+            across your devices, bank sync and more...
+          </Trans>
+        </Text>
+        <Text
+          style={{
+            fontSize: 16,
+            color: theme.pageText,
+            lineHeight: 1.5,
+          }}
+        >
+          <Trans>
+            Need to expose your server to the internet? Follow our step-by-step{' '}
+            <Link
+              variant="external"
+              to="https://actualbudget.org/docs/install/desktop-app"
+            >
+              guide
+            </Link>{' '}
+            for more information.
+          </Trans>
+        </Text>
+
+        {configError && (
+          <Text style={{ color: theme.errorText, marginTop: 10 }}>
+            {configError}
+          </Text>
+        )}
+
+        <View
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            gap: 10,
+          }}
+        >
+          <View style={{ flexDirection: 'column', gap: 5, flex: 1 }}>
+            <Label title={t('Domain')} style={{ textAlign: 'left' }} />
+            <BigInput
+              value="localhost"
+              disabled
+              type="text"
+              className={css({
+                '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+                  WebkitAppearance: 'none',
+                  margin: 0,
+                },
+              })}
+            />
+          </View>
+
+          <View style={{ flexDirection: 'column', gap: 5 }}>
+            <Label
+              title={t('Port')}
+              style={{ textAlign: 'left', width: '7ch' }}
+            />
+            <BigInput
+              name="port"
+              value={String(electronServerPort)}
+              aria-label={t('Port')}
+              type="number"
+              className={css({
+                '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
+                  WebkitAppearance: 'none',
+                  margin: 0,
+                },
+                width: '7ch',
+                textAlign: 'center',
+              })}
+              autoFocus={true}
+              maxLength={5}
+              onChange={event =>
+                setElectronServerPort(Number(event.target.value))
+              }
+            />
+          </View>
+
+          <View
+            style={{
+              flexDirection: 'column',
+              gap: 5,
+              justifyContent: 'end',
+            }}
+          >
+            <Label title={t('')} style={{ textAlign: 'left', width: '7ch' }} />
+            {!electronSyncServerRunning ? (
+              <Button
+                variant="primary"
+                style={{ padding: 10, width: '8ch' }}
+                onPress={onConfigureSyncServer}
+                isPending={startingSyncServer}
+              >
+                <Trans>Start</Trans>
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                style={{ padding: 10, width: '8ch' }}
+                onPress={onConfigureSyncServer}
+                isPending={startingSyncServer}
+              >
+                <Trans>Save</Trans>
+              </Button>
+            )}
+          </View>
+        </View>
+      </View>
+
+      <View
+        style={{
+          flexDirection: 'row',
+          marginTop: 20,
+          gap: 15,
+          flexFlow: 'row wrap',
+          justifyContent: 'center',
+        }}
+      >
+        {hasInternalServerConfig && (
+          <Button
+            variant="bare"
+            style={{ color: theme.pageTextLight, margin: 5 }}
+            onPress={() => navigate(-1)}
+          >
+            <Trans>Cancel</Trans>
+          </Button>
+        )}
+        <Button
+          variant="bare"
+          style={{ color: theme.pageTextLight, margin: 5 }}
+          onPress={dontUseSyncServer}
+        >
+          <Trans>Don’t use a server</Trans>
+        </Button>
+        {canShowExternalServerConfig && (
+          <Button
+            variant="bare"
+            style={{ color: theme.pageTextLight, margin: 5 }}
+            onPress={() => onSetServerConfigView('external')}
+          >
+            <Trans>Use an external server</Trans>
+          </Button>
+        )}
+      </View>
+    </>
+  );
+}
+
 export function ConfigServer() {
-  useSetThemeColor(theme.mobileConfigServerViewTheme);
-  const { createBudget, signOut, loggedIn } = useActions();
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
   const navigate = useNavigate();
   const [url, setUrl] = useState('');
   const currentUrl = useServerURL();
@@ -31,44 +295,51 @@ export function ConfigServer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const restartElectronServer = useCallback(() => {
+    globalThis.window.Actual.restartElectronServer();
+    setError(null);
+  }, []);
+
+  const [_serverSelfSignedCert, setServerSelfSignedCert] = useGlobalPref(
+    'serverSelfSignedCert',
+    restartElectronServer,
+  );
+
   function getErrorMessage(error: string) {
     switch (error) {
       case 'network-failure':
-        return 'Server is not running at this URL. Make sure you have HTTPS set up properly.';
+        return t(
+          'Server is not running at this URL. Make sure you have HTTPS set up properly.',
+        );
       default:
-        return 'Server does not look like an Actual server. Is it set up correctly?';
+        return t(
+          'Server does not look like an Actual server. Is it set up correctly?',
+        );
     }
   }
 
   async function onSubmit() {
-    if (url === '' || loading) {
+    if (url === null || url === '' || loading) {
       return;
     }
 
     setError(null);
     setLoading(true);
-    const { error } = await setServerUrl(url);
 
-    if (
-      ['network-failure', 'get-server-failure'].includes(error) &&
-      !url.startsWith('http://') &&
-      !url.startsWith('https://')
-    ) {
-      const { error } = await setServerUrl('https://' + url);
-      if (error) {
-        setUrl('https://' + url);
-        setError(error);
-      } else {
-        await signOut();
-        navigate('/');
-      }
-      setLoading(false);
-    } else if (error) {
+    let httpUrl = url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      httpUrl = 'https://' + url;
+    }
+
+    const { error } = await setServerUrl(httpUrl);
+    setUrl(httpUrl);
+
+    if (error) {
       setLoading(false);
       setError(error);
     } else {
       setLoading(false);
-      await signOut();
+      await dispatch(signOut());
       navigate('/');
     }
   }
@@ -77,139 +348,207 @@ export function ConfigServer() {
     setUrl(window.location.origin);
   }
 
+  async function onSelectSelfSignedCertificate() {
+    const selfSignedCertificateLocation = await window.Actual.openFileDialog({
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Self Signed Certificate',
+          extensions: ['crt', 'pem'],
+        },
+      ],
+    });
+
+    if (selfSignedCertificateLocation) {
+      setServerSelfSignedCert(selfSignedCertificateLocation[0]);
+    }
+  }
+
   async function onSkip() {
     await setServerUrl(null);
-    await loggedIn();
+    await dispatch(loggedIn());
     navigate('/');
   }
 
   async function onCreateTestFile() {
     await setServerUrl(null);
-    await createBudget({ testMode: true });
-    window.__navigate('/');
+    await dispatch(createBudget({ testMode: true }));
+    navigate('/');
   }
+
+  const [syncServerConfig] = useGlobalPref('syncServerConfig');
+
+  const hasExternalServerConfig = !syncServerConfig?.port && !!currentUrl;
+
+  const [serverConfigView, onSetServerConfigView] = useState<
+    'internal' | 'external'
+  >(() => {
+    if (isElectron() && !hasExternalServerConfig) {
+      return 'internal';
+    }
+
+    return 'external';
+  });
 
   return (
     <View style={{ maxWidth: 500, marginTop: -30 }}>
-      <Title text="Where’s the server?" />
-
-      <Text
-        style={{
-          fontSize: 16,
-          color: theme.tableRowHeaderText,
-          lineHeight: 1.5,
-        }}
-      >
-        {currentUrl ? (
-          <>
-            Existing sessions will be logged out and you will log in to this
-            server. We will validate that Actual is running at this URL.
-          </>
-        ) : (
-          <>
-            There is no server configured. After running the server, specify the
-            URL here to use the app. You can always change this later. We will
-            validate that Actual is running at this URL.
-          </>
-        )}
-      </Text>
-
-      {error && (
-        <Text
-          style={{
-            marginTop: 20,
-            color: theme.errorText,
-            borderRadius: 4,
-            fontSize: 15,
-          }}
-        >
-          {getErrorMessage(error)}
-        </Text>
-      )}
-
-      <form
-        style={{ display: 'flex', flexDirection: 'row', marginTop: 30 }}
-        onSubmit={e => {
-          e.preventDefault();
-          onSubmit();
-        }}
-      >
-        <BigInput
-          autoFocus={true}
-          placeholder="https://example.com"
-          value={url || ''}
-          onChangeValue={setUrl}
-          style={{ flex: 1, marginRight: 10 }}
+      {serverConfigView === 'internal' && (
+        <ElectronServerConfig
+          onDoNotUseServer={onSkip}
+          onSetServerConfigView={onSetServerConfigView}
         />
-        <ButtonWithLoading
-          type="primary"
-          loading={loading}
-          style={{ fontSize: 15 }}
-        >
-          OK
-        </ButtonWithLoading>
-        {currentUrl && (
-          <Button
-            type="bare"
-            style={{ fontSize: 15, marginLeft: 10 }}
-            onClick={() => navigate(-1)}
+      )}
+      {serverConfigView === 'external' && (
+        <>
+          <Title text={t('Where’s the server?')} />
+          <Text
+            style={{
+              fontSize: 16,
+              color: theme.tableRowHeaderText,
+              lineHeight: 1.5,
+            }}
           >
-            Cancel
-          </Button>
-        )}
-      </form>
-
-      <View
-        style={{
-          flexDirection: 'row',
-          flexFlow: 'row wrap',
-          justifyContent: 'center',
-          marginTop: 15,
-        }}
-      >
-        {currentUrl ? (
-          <Button
-            type="bare"
-            style={{ color: theme.pageTextLight }}
-            onClick={onSkip}
-          >
-            Stop using a server
-          </Button>
-        ) : (
-          <>
-            {!isElectron() && (
-              <Button
-                type="bare"
+            {currentUrl ? (
+              <Trans>
+                Existing sessions will be logged out and you will log in to this
+                server. We will validate that Actual is running at this URL.
+              </Trans>
+            ) : (
+              <Trans>
+                There is no server configured. After running the server, specify
+                the URL here to use the app. You can always change this later.
+                We will validate that Actual is running at this URL.
+              </Trans>
+            )}
+          </Text>
+          {error && (
+            <>
+              <Text
                 style={{
-                  color: theme.pageTextLight,
-                  margin: 5,
-                  marginRight: 15,
+                  marginTop: 20,
+                  color: theme.errorText,
+                  borderRadius: 4,
+                  fontSize: 15,
                 }}
-                onClick={onSameDomain}
               >
-                Use current domain
-              </Button>
-            )}
-            <Button
-              type="bare"
-              style={{ color: theme.pageTextLight, margin: 5 }}
-              onClick={onSkip}
+                {getErrorMessage(error)}
+              </Text>
+              {isElectron() && (
+                <View
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    marginTop: 20,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: theme.errorText,
+                      borderRadius: 4,
+                      fontSize: 15,
+                    }}
+                  >
+                    <Trans>
+                      If the server is using a self-signed certificate{' '}
+                      <Link
+                        variant="text"
+                        style={{ fontSize: 15 }}
+                        onClick={onSelectSelfSignedCertificate}
+                      >
+                        select it here
+                      </Link>
+                      .
+                    </Trans>
+                  </Text>
+                </View>
+              )}
+            </>
+          )}
+          <View
+            style={{ display: 'flex', flexDirection: 'row', marginTop: 30 }}
+          >
+            <BigInput
+              autoFocus={true}
+              placeholder={t('https://example.com')}
+              value={url || ''}
+              onChangeValue={setUrl}
+              style={{ flex: 1, marginRight: 10 }}
+              onEnter={onSubmit}
+            />
+            <ButtonWithLoading
+              variant="primary"
+              isLoading={loading}
+              style={{ fontSize: 15 }}
+              onPress={onSubmit}
             >
-              Don’t use a server
-            </Button>
-
-            {isNonProductionEnvironment() && (
+              {t('OK')}
+            </ButtonWithLoading>
+            {currentUrl && (
               <Button
-                type="primary"
-                style={{ marginLeft: 15 }}
-                onClick={onCreateTestFile}
+                variant="bare"
+                style={{ fontSize: 15, marginLeft: 10 }}
+                onPress={() => navigate(-1)}
               >
-                Create test file
+                {t('Cancel')}
               </Button>
             )}
-          </>
-        )}
-      </View>
+          </View>
+          <View
+            style={{
+              flexDirection: 'row',
+              flexFlow: 'row wrap',
+              justifyContent: 'center',
+              marginTop: 15,
+            }}
+          >
+            {currentUrl ? (
+              <Button
+                variant="bare"
+                style={{ color: theme.pageTextLight }}
+                onPress={onSkip}
+              >
+                {t('Stop using a server')}
+              </Button>
+            ) : (
+              <>
+                {!isElectron() && (
+                  <Button
+                    variant="bare"
+                    style={{
+                      color: theme.pageTextLight,
+                      margin: 5,
+                      marginRight: 15,
+                    }}
+                    onPress={onSameDomain}
+                  >
+                    {t('Use current domain')}
+                  </Button>
+                )}
+                <Button
+                  variant="bare"
+                  style={{ color: theme.pageTextLight, margin: 5 }}
+                  onPress={onSkip}
+                >
+                  {t('Don’t use a server')}
+                </Button>
+
+                {isNonProductionEnvironment() && (
+                  <Button
+                    variant="primary"
+                    style={{ marginLeft: 15 }}
+                    onPress={async () => {
+                      await onCreateTestFile();
+                      navigate('/');
+                    }}
+                  >
+                    {t('Create test file')}
+                  </Button>
+                )}
+              </>
+            )}
+          </View>
+        </>
+      )}
     </View>
   );
 }

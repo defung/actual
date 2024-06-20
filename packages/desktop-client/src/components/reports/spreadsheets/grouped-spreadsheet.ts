@@ -1,31 +1,26 @@
-import { runQuery } from 'loot-core/src/client/query-helpers';
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { integerToAmount } from 'loot-core/src/shared/util';
-import {
-  type IntervalEntity,
-  type GroupedEntity,
-} from 'loot-core/src/types/models/reports';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { type GroupedEntity } from 'loot-core/types/models';
+
+import { type createCustomSpreadsheetProps } from './custom-spreadsheet';
+import { filterEmptyRows } from './filterEmptyRows';
+import { makeQuery } from './makeQuery';
+import { recalculate } from './recalculate';
+import { sortData } from './sortData';
 
 import {
   categoryLists,
   type QueryDataEntity,
   ReportOptions,
-} from '../ReportOptions';
-
-import { type createCustomSpreadsheetProps } from './custom-spreadsheet';
-import { filterEmptyRows } from './filterEmptyRows';
-import { filterHiddenItems } from './filterHiddenItems';
-import { makeQuery } from './makeQuery';
-import { recalculate } from './recalculate';
+} from '@desktop-client/components/reports/ReportOptions';
+import { type useSpreadsheet } from '@desktop-client/hooks/useSpreadsheet';
+import { aqlQuery } from '@desktop-client/queries/aqlQuery';
 
 export function createGroupedSpreadsheet({
   startDate,
   endDate,
   interval,
   categories,
-  selectedCategories,
   conditions = [],
   conditionsOp,
   showEmpty,
@@ -33,17 +28,10 @@ export function createGroupedSpreadsheet({
   showHiddenCategories,
   showUncategorized,
   balanceTypeOp,
+  sortByOp,
   firstDayOfWeekIdx,
 }: createCustomSpreadsheetProps) {
   const [categoryList, categoryGroup] = categoryLists(categories);
-
-  const categoryFilter = (categories.list || []).filter(
-    category =>
-      selectedCategories &&
-      selectedCategories.some(
-        selectedCategory => selectedCategory.id === category.id,
-      ),
-  );
 
   return async (
     spreadsheet: ReturnType<typeof useSpreadsheet>,
@@ -61,24 +49,22 @@ export function createGroupedSpreadsheet({
     let assets: QueryDataEntity[];
     let debts: QueryDataEntity[];
     [assets, debts] = await Promise.all([
-      runQuery(
+      aqlQuery(
         makeQuery(
           'assets',
           startDate,
           endDate,
           interval,
-          categoryFilter,
           conditionsOpKey,
           filters,
         ),
       ).then(({ data }) => data),
-      runQuery(
+      aqlQuery(
         makeQuery(
           'debts',
           startDate,
           endDate,
           interval,
-          categoryFilter,
           conditionsOpKey,
           filters,
         ),
@@ -109,64 +95,18 @@ export function createGroupedSpreadsheet({
 
     const groupedData: GroupedEntity[] = categoryGroup.map(
       group => {
-        let totalAssets = 0;
-        let totalDebts = 0;
-
-        const intervalData = intervals.reduce(
-          (arr: IntervalEntity[], intervalItem) => {
-            let groupedAssets = 0;
-            let groupedDebts = 0;
-
-            if (!group.categories) {
-              return [];
-            }
-
-            group.categories.forEach(item => {
-              const intervalAssets = filterHiddenItems(
-                item,
-                assets,
-                showOffBudget,
-                showHiddenCategories,
-                showUncategorized,
-              )
-                .filter(
-                  asset =>
-                    asset.date === intervalItem &&
-                    asset.category === (item.id ?? null),
-                )
-                .reduce((a, v) => (a = a + v.amount), 0);
-              groupedAssets += intervalAssets;
-
-              const intervalDebts = filterHiddenItems(
-                item,
-                debts,
-                showOffBudget,
-                showHiddenCategories,
-                showUncategorized,
-              )
-                .filter(
-                  debts =>
-                    debts.date === intervalItem &&
-                    debts.category === (item.id ?? null),
-                )
-                .reduce((a, v) => (a = a + v.amount), 0);
-              groupedDebts += intervalDebts;
-            });
-
-            totalAssets += groupedAssets;
-            totalDebts += groupedDebts;
-
-            arr.push({
-              date: intervalItem,
-              totalAssets: integerToAmount(groupedAssets),
-              totalDebts: integerToAmount(groupedDebts),
-              totalTotals: integerToAmount(groupedDebts + groupedAssets),
-            });
-
-            return arr;
-          },
-          [],
-        );
+        const grouped = recalculate({
+          item: group,
+          intervals,
+          assets,
+          debts,
+          groupByLabel: 'categoryGroup',
+          showOffBudget,
+          showHiddenCategories,
+          showUncategorized,
+          startDate,
+          endDate,
+        });
 
         const stackedCategories =
           group.categories &&
@@ -187,12 +127,7 @@ export function createGroupedSpreadsheet({
           });
 
         return {
-          id: group.id || '',
-          name: group.name,
-          totalAssets: integerToAmount(totalAssets),
-          totalDebts: integerToAmount(totalDebts),
-          totalTotals: integerToAmount(totalAssets + totalDebts),
-          intervalData,
+          ...grouped,
           categories:
             stackedCategories &&
             stackedCategories.filter(i =>
@@ -202,10 +137,20 @@ export function createGroupedSpreadsheet({
       },
       [startDate, endDate],
     );
-    setData(
-      groupedData.filter(i =>
-        filterEmptyRows({ showEmpty, data: i, balanceTypeOp }),
-      ),
+
+    const groupedDataFiltered = groupedData.filter(i =>
+      filterEmptyRows({ showEmpty, data: i, balanceTypeOp }),
     );
+
+    const sortedGroupedDataFiltered = [...groupedDataFiltered]
+      .sort(sortData({ balanceTypeOp, sortByOp }))
+      .map(g => {
+        g.categories = [...(g.categories ?? [])].sort(
+          sortData({ balanceTypeOp, sortByOp }),
+        );
+        return g;
+      });
+
+    setData(sortedGroupedDataFiltered);
   };
 }

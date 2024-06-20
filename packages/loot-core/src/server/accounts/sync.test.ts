@@ -1,30 +1,33 @@
 // @ts-strict-ignore
 import * as monthUtils from '../../shared/months';
+import { SyncedPrefs } from '../../types/prefs';
 import * as db from '../db';
 import { loadMappings } from '../db/mappings';
 import { post } from '../post';
 import { getServer } from '../server-config';
+import { loadRules, insertRule } from '../transactions/transaction-rules';
 
 import { reconcileTransactions, addTransactions } from './sync';
-import { loadRules, insertRule } from './transaction-rules';
 
-jest.mock('../../shared/months', () => ({
-  ...jest.requireActual('../../shared/months'),
-  currentDay: jest.fn(),
-  currentMonth: jest.fn(),
+vi.mock('../../shared/months', async () => ({
+  ...(await vi.importActual('../../shared/months')),
+  currentDay: vi.fn(),
+  currentMonth: vi.fn(),
 }));
 
 beforeEach(async () => {
-  jest.resetAllMocks();
-  (monthUtils.currentDay as jest.Mock).mockReturnValue('2017-10-15');
-  (monthUtils.currentMonth as jest.Mock).mockReturnValue('2017-10');
+  vi.resetAllMocks();
+  vi.mocked(monthUtils.currentDay).mockReturnValue('2017-10-15');
+  vi.mocked(monthUtils.currentMonth).mockReturnValue('2017-10');
   await global.emptyDatabase()();
   await loadMappings();
   await loadRules();
 });
 
 function getAllTransactions() {
-  return db.all(
+  return db.all<
+    db.DbViewTransactionInternal & { payee_name: db.DbPayee['name'] }
+  >(
     `SELECT t.*, p.name as payee_name
        FROM v_transactions_internal t
        LEFT JOIN payees p ON p.id = t.payee
@@ -119,6 +122,49 @@ describe('Account sync', () => {
     await expect(reconcileTransactions(acctId, [{}])).rejects.toThrow(
       /`date` is required/,
     );
+  });
+
+  test('reconcile doesnt rematch deleted transactions if reimport disabled', async () => {
+    const { id: acctId } = await prepareDatabase();
+    const reimportKey =
+      `sync-reimport-deleted-${acctId}` satisfies keyof SyncedPrefs;
+    await db.update('preferences', { id: reimportKey, value: 'false' });
+
+    await reconcileTransactions(acctId, [
+      { date: '2020-01-01', imported_id: 'finid' },
+    ]);
+
+    const transactions1 = await getAllTransactions();
+    expect(transactions1.length).toBe(1);
+
+    await db.deleteTransaction(transactions1[0]);
+
+    await reconcileTransactions(acctId, [
+      { date: '2020-01-01', imported_id: 'finid' },
+    ]);
+    const transactions2 = await getAllTransactions();
+    expect(transactions2.length).toBe(1);
+    expect(transactions2).toMatchSnapshot();
+  });
+
+  test('reconcile does rematch deleted transactions by default', async () => {
+    const { id: acctId } = await prepareDatabase();
+
+    await reconcileTransactions(acctId, [
+      { date: '2020-01-01', imported_id: 'finid' },
+    ]);
+
+    const transactions1 = await getAllTransactions();
+    expect(transactions1.length).toBe(1);
+
+    await db.deleteTransaction(transactions1[0]);
+
+    await reconcileTransactions(acctId, [
+      { date: '2020-01-01', imported_id: 'finid' },
+    ]);
+    const transactions2 = await getAllTransactions();
+    expect(transactions2.length).toBe(2);
+    expect(transactions2).toMatchSnapshot();
   });
 
   test('reconcile run rules with inferred payee', async () => {
@@ -401,7 +447,7 @@ describe('Account sync', () => {
 
   test(
     'given an imported tx with no imported_id, ' +
-      'when an existing transaction that has an imported_id and matches amount and is within 7 days of imported tx,' +
+      'when using fuzzy search V2, existing transaction has an imported_id, matches amount, and is within 7 days of imported tx, ' +
       'then imported tx should reconcile with existing transaction from fuzzy match',
     async () => {
       const { id } = await prepareDatabase();
@@ -436,6 +482,59 @@ describe('Account sync', () => {
           imported_id: null,
         },
       ]);
+
+      payees = await getAllPayees();
+      expect(payees.length).toBe(1);
+
+      transactions = await getAllTransactions();
+      expect(transactions.length).toBe(1);
+
+      expect(transactions[0].amount).toBe(-1239);
+    },
+  );
+
+  test(
+    'given an imported tx has an imported_id, ' +
+      'when not using fuzzy search V2, existing transaction has an imported_id, matches amount, and is within 7 days of imported tx, ' +
+      'then imported tx should reconcile with existing transaction from fuzzy match',
+    async () => {
+      const { id } = await prepareDatabase();
+
+      let payees = await getAllPayees();
+      expect(payees.length).toBe(0);
+
+      const existingTx = {
+        date: '2024-04-05',
+        amount: -1239,
+        imported_payee: 'Acme Inc.',
+        payee_name: 'Acme Inc.',
+        imported_id: 'b85cdd57-5a1c-4ca5-bd54-12e5b56fa02c',
+        notes: 'TEST TRANSACTION',
+        cleared: true,
+      };
+
+      // Add transaction to represent existing transaction with imoprted_id
+      await reconcileTransactions(id, [existingTx]);
+
+      payees = await getAllPayees();
+      expect(payees.length).toBe(1);
+
+      let transactions = await getAllTransactions();
+      expect(transactions.length).toBe(1);
+
+      // Import transaction similar to existing but with different date and imported_id
+      await reconcileTransactions(
+        id,
+        [
+          {
+            ...existingTx,
+            date: '2024-04-06',
+            imported_id: 'something-else-entirely',
+          },
+        ],
+        false,
+        false,
+      );
 
       payees = await getAllPayees();
       expect(payees.length).toBe(1);

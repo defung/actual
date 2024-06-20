@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { patchFetchForSqlJS } from '../../../mocks/util';
+
 // eslint-disable-next-line no-restricted-imports
 import {
   init,
@@ -8,14 +10,16 @@ import {
   runQuery,
 } from './index.web';
 
-beforeAll(() => {
-  process.env.PUBLIC_URL =
-    __dirname + '/../../../../../../node_modules/@jlongster/sql.js/dist/';
-  return init();
+beforeAll(async () => {
+  const baseURL = `${__dirname}/../../../../../../node_modules/@jlongster/sql.js/dist/`;
+  patchFetchForSqlJS(baseURL);
+
+  return init({ baseURL });
 });
 
 const initSQL = `
 CREATE TABLE numbers (id TEXT PRIMARY KEY, number INTEGER);
+CREATE TABLE textstrings (id TEXT PRIMARY KEY, string TEXT);
 `;
 
 describe('Web sqlite', () => {
@@ -30,7 +34,7 @@ describe('Web sqlite', () => {
     // @ts-expect-error Property 'number' does not exist on type 'unknown'
     expect(rows[0].number).toBe(4);
 
-    const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => null);
     expect(() => {
       transaction(db, () => {
         runQuery(db, "INSERT INTO numbers (id, number) VALUES ('id2', 5)");
@@ -64,7 +68,9 @@ describe('Web sqlite', () => {
       runQuery(db, "INSERT INTO numbers (id, number) VALUES ('id3', 6)");
 
       // Only this transaction should fail
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const consoleSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => null);
       expect(() => {
         transaction(db, () => {
           runQuery(db, "INSERT INTO numbers (id, number) VALUES ('id4', 7)");
@@ -84,5 +90,26 @@ describe('Web sqlite', () => {
     expect(rows[1].number).toBe(5);
     // @ts-expect-error Property 'number' does not exist on type 'unknown'
     expect(rows[2].number).toBe(6);
+  });
+
+  it('should match regex on text fields', async () => {
+    const db = await openDatabase();
+    execQuery(db, initSQL);
+
+    runQuery(
+      db,
+      "INSERT INTO textstrings (id, string) VALUES ('id1', 'not empty string')",
+    );
+    runQuery(db, "INSERT INTO textstrings (id) VALUES ('id2')");
+
+    const rows = runQuery(
+      db,
+      'SELECT id FROM textstrings where REGEXP("n.", string)',
+      null,
+      true,
+    );
+    expect(rows.length).toBe(1);
+    // @ts-expect-error Property 'id' does not exist on type 'unknown'
+    expect(rows[0].id).toBe('id1');
   });
 });

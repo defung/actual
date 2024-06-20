@@ -1,27 +1,37 @@
 // @ts-strict-ignore
-import React, { type ComponentProps, useState } from 'react';
+import React, {
+  useState,
+  type ComponentType,
+  type ComponentPropsWithoutRef,
+  type FormEvent,
+} from 'react';
+import { Form } from 'react-aria-components';
 
-import { styles } from '../../style';
-import { Button } from '../common/Button';
-import { FormError } from '../common/FormError';
-import { InitialFocus } from '../common/InitialFocus';
-import { Modal } from '../common/Modal';
-import { View } from '../common/View';
-import { InputField } from '../mobile/MobileForms';
-import { type CommonModalProps } from '../Modals';
+import { Button } from '@actual-app/components/button';
+import { FormError } from '@actual-app/components/form-error';
+import { InitialFocus } from '@actual-app/components/initial-focus';
+import { styles } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
+
+import {
+  Modal,
+  ModalCloseButton,
+  type ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import { InputField } from '@desktop-client/components/mobile/MobileForms';
 
 type SingleInputModalProps = {
-  modalProps: Partial<CommonModalProps>;
-  title: ComponentProps<typeof Modal>['title'];
+  name: string;
+  Header: ComponentType<ComponentPropsWithoutRef<typeof ModalHeader>>;
   buttonText: string;
   onSubmit: (value: string) => void;
-  onValidate?: (value: string) => string[];
+  onValidate?: (value: string) => string | null;
   inputPlaceholder?: string;
 };
 
 export function SingleInputModal({
-  modalProps,
-  title,
+  name,
+  Header,
   buttonText,
   onSubmit,
   onValidate,
@@ -30,7 +40,9 @@ export function SingleInputModal({
   const [value, setValue] = useState('');
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const _onSubmit = value => {
+  const _onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
     const error = onValidate?.(value);
     if (error) {
       setErrorMessage(error);
@@ -38,51 +50,61 @@ export function SingleInputModal({
     }
 
     onSubmit?.(value);
-    modalProps.onClose();
   };
 
   return (
-    <Modal title={title} {...modalProps}>
-      <View>
-        <InitialFocus>
-          <InputField
-            placeholder={inputPlaceholder}
-            defaultValue={value}
-            onUpdate={setValue}
-            onEnter={e => _onSubmit(e.currentTarget.value)}
-          />
-        </InitialFocus>
-        {errorMessage && (
-          <FormError
-            style={{
-              paddingTop: 5,
-              marginLeft: styles.mobileEditingPadding,
-              marginRight: styles.mobileEditingPadding,
+    <Modal name={name}>
+      {({ state: { close } }) => (
+        <>
+          <Header rightContent={<ModalCloseButton onPress={close} />} />
+          <Form
+            onSubmit={e => {
+              _onSubmit(e);
+              close();
             }}
           >
-            * {errorMessage}
-          </FormError>
-        )}
-      </View>
-      <View
-        style={{
-          justifyContent: 'center',
-          alignItems: 'center',
-          paddingTop: 10,
-        }}
-      >
-        <Button
-          type="primary"
-          style={{
-            height: styles.mobileMinHeight,
-            marginLeft: styles.mobileEditingPadding,
-            marginRight: styles.mobileEditingPadding,
-          }}
-          onClick={() => _onSubmit(value)}
-        >
-          {buttonText}
-        </Button>
-      </View>
+            <View>
+              <InitialFocus>
+                <InputField
+                  placeholder={inputPlaceholder}
+                  defaultValue={value}
+                  onChangeValue={setValue}
+                />
+              </InitialFocus>
+              {errorMessage && (
+                <FormError
+                  style={{
+                    paddingTop: 5,
+                    marginLeft: styles.mobileEditingPadding,
+                    marginRight: styles.mobileEditingPadding,
+                  }}
+                >
+                  * {errorMessage}
+                </FormError>
+              )}
+            </View>
+            <View
+              style={{
+                justifyContent: 'center',
+                alignItems: 'center',
+                paddingTop: 10,
+              }}
+            >
+              <Button
+                type="submit"
+                variant="primary"
+                style={{
+                  height: styles.mobileMinHeight,
+                  marginLeft: styles.mobileEditingPadding,
+                  marginRight: styles.mobileEditingPadding,
+                }}
+              >
+                {buttonText}
+              </Button>
+            </View>
+          </Form>
+        </>
+      )}
     </Modal>
   );
 }

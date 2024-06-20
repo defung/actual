@@ -1,35 +1,31 @@
-import React from 'react';
+import React, { type ComponentPropsWithoutRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { useNavigate } from '../../hooks/useNavigate';
-import { SvgCheveronLeft } from '../../icons/v1';
-import { type CSSProperties, styles, theme } from '../../style';
-import { Button } from '../common/Button';
-import { Text } from '../common/Text';
+import { Button } from '@actual-app/components/button';
+import { SvgCheveronLeft } from '@actual-app/components/icons/v1';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
 
-type MobileBackButtonProps = {
-  onClick?: () => void;
-  style?: CSSProperties;
-};
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
 
-export function MobileBackButton({ onClick, style }: MobileBackButtonProps) {
+type MobileBackButtonProps = ComponentPropsWithoutRef<typeof Button>;
+
+export function MobileBackButton({
+  onPress,
+  style,
+  ...props
+}: MobileBackButtonProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   return (
     <Button
-      type="bare"
-      aria-label="Back"
+      variant="bare"
       style={{
-        color: theme.mobileHeaderText,
-        justifyContent: 'center',
         margin: 10,
-        paddingLeft: 5,
-        paddingRight: 3,
         ...style,
       }}
-      hoveredStyle={{
-        color: theme.mobileHeaderText,
-        background: theme.mobileHeaderTextHover,
-      }}
-      onClick={onClick || (() => navigate(-1))}
+      onPress={onPress || (() => navigate(-1))}
+      {...props}
     >
       <SvgCheveronLeft
         style={{ width: 30, height: 30, margin: -10, marginLeft: -5 }}
@@ -42,7 +38,7 @@ export function MobileBackButton({ onClick, style }: MobileBackButtonProps) {
           marginRight: 5,
         }}
       >
-        Back
+        {t('Back')}
       </Text>
     </Button>
   );

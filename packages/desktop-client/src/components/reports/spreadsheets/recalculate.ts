@@ -1,16 +1,16 @@
-import * as monthUtils from 'loot-core/src/shared/months';
-import { amountToInteger, integerToAmount } from 'loot-core/src/shared/util';
+import * as monthUtils from 'loot-core/shared/months';
+import { amountToInteger, integerToAmount } from 'loot-core/shared/util';
 import {
   type GroupedEntity,
   type IntervalEntity,
-} from 'loot-core/types/models/reports';
+} from 'loot-core/types/models';
+
+import { filterHiddenItems } from './filterHiddenItems';
 
 import {
   type UncategorizedEntity,
   type QueryDataEntity,
-} from '../ReportOptions';
-
-import { filterHiddenItems } from './filterHiddenItems';
+} from '@desktop-client/components/reports/ReportOptions';
 
 type recalculateProps = {
   item: UncategorizedEntity;
@@ -43,17 +43,21 @@ export function recalculate({
     (arr: IntervalEntity[], intervalItem, index) => {
       const last = arr.length === 0 ? null : arr[arr.length - 1];
 
+      const groupsByCategory =
+        groupByLabel === 'category' || groupByLabel === 'categoryGroup';
       const intervalAssets = filterHiddenItems(
         item,
         assets,
         showOffBudget,
         showHiddenCategories,
         showUncategorized,
+        groupsByCategory,
       )
         .filter(
           asset =>
             asset.date === intervalItem &&
-            asset[groupByLabel] === (item.id ?? null),
+            (asset[groupByLabel] === (item.id ?? null) ||
+              (item.uncategorized_id && groupsByCategory)),
         )
         .reduce((a, v) => (a = a + v.amount), 0);
       totalAssets += intervalAssets;
@@ -64,23 +68,29 @@ export function recalculate({
         showOffBudget,
         showHiddenCategories,
         showUncategorized,
+        groupsByCategory,
       )
         .filter(
           debt =>
             debt.date === intervalItem &&
-            debt[groupByLabel] === (item.id ?? null),
+            (debt[groupByLabel] === (item.id ?? null) ||
+              (item.uncategorized_id && groupsByCategory)),
         )
         .reduce((a, v) => (a = a + v.amount), 0);
       totalDebts += intervalDebts;
 
+      const intervalTotals = intervalAssets + intervalDebts;
+
       const change = last
-        ? intervalAssets + intervalDebts - amountToInteger(last.totalTotals)
+        ? intervalTotals - amountToInteger(last.totalTotals)
         : 0;
 
       arr.push({
         totalAssets: integerToAmount(intervalAssets),
         totalDebts: integerToAmount(intervalDebts),
-        totalTotals: integerToAmount(intervalAssets + intervalDebts),
+        netAssets: intervalTotals > 0 ? integerToAmount(intervalTotals) : 0,
+        netDebts: intervalTotals < 0 ? integerToAmount(intervalTotals) : 0,
+        totalTotals: integerToAmount(intervalTotals),
         change,
         intervalStartDate: index === 0 ? startDate : intervalItem,
         intervalEndDate:
@@ -94,12 +104,16 @@ export function recalculate({
     [],
   );
 
+  const totalTotals = totalAssets + totalDebts;
+
   return {
     id: item.id || '',
     name: item.name,
     totalAssets: integerToAmount(totalAssets),
     totalDebts: integerToAmount(totalDebts),
-    totalTotals: integerToAmount(totalAssets + totalDebts),
+    netAssets: totalTotals > 0 ? integerToAmount(totalTotals) : 0,
+    netDebts: totalTotals < 0 ? integerToAmount(totalTotals) : 0,
+    totalTotals: integerToAmount(totalTotals),
     intervalData,
   };
 }

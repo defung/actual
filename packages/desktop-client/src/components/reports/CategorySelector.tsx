@@ -1,23 +1,25 @@
 // @ts-strict-ignore
 import React, { Fragment, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import {
-  type CategoryEntity,
-  type CategoryGroupEntity,
-} from 'loot-core/src/types/models';
-
+import { Button } from '@actual-app/components/button';
 import {
   SvgCheckAll,
   SvgUncheckAll,
   SvgViewHide,
   SvgViewShow,
-} from '../../icons/v2';
-import { Button } from '../common/Button';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { Checkbox } from '../forms';
+} from '@actual-app/components/icons/v2';
+import { Text } from '@actual-app/components/text';
+import { View } from '@actual-app/components/view';
+
+import {
+  type CategoryEntity,
+  type CategoryGroupEntity,
+} from 'loot-core/types/models';
 
 import { GraphButton } from './GraphButton';
+
+import { Checkbox } from '@desktop-client/components/forms';
 
 type CategorySelectorProps = {
   categoryGroups: Array<CategoryGroupEntity>;
@@ -32,6 +34,7 @@ export function CategorySelector({
   setSelectedCategories,
   showHiddenCategories = true,
 }: CategorySelectorProps) {
+  const { t } = useTranslation();
   const [uncheckedHidden, setUncheckedHidden] = useState(false);
   const filteredGroup = (categoryGroup: CategoryGroupEntity) => {
     return categoryGroup.categories.filter(f => {
@@ -72,8 +75,8 @@ export function CategorySelector({
         }}
       >
         <Button
-          type="bare"
-          onClick={() => setUncheckedHidden(state => !state)}
+          variant="bare"
+          onPress={() => setUncheckedHidden(state => !state)}
           style={{ padding: 8 }}
         >
           <View>
@@ -84,16 +87,30 @@ export function CategorySelector({
                   height={15}
                   style={{ marginRight: 5 }}
                 />
-                <Text>Show unchecked</Text>
+                <Text>{t('Show unchecked')}</Text>
               </View>
             ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}
+              >
                 <SvgViewHide
                   width={15}
                   height={15}
                   style={{ marginRight: 5 }}
                 />
-                <Text>Hide unchecked</Text>
+                <Text
+                  style={{
+                    maxWidth: 100,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {t('Hide unchecked')}
+                </Text>
               </View>
             )}
           </View>
@@ -102,7 +119,7 @@ export function CategorySelector({
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <GraphButton
             selected={allCategoriesSelected}
-            title="Select All"
+            title={t('Select All')}
             onSelect={() => {
               setSelectedCategories(selectAll);
             }}
@@ -112,7 +129,7 @@ export function CategorySelector({
           </GraphButton>
           <GraphButton
             selected={allCategoriesUnselected}
-            title="Unselect All"
+            title={t('Unselect All')}
             onSelect={() => {
               setSelectedCategories([]);
             }}

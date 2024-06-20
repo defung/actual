@@ -1,24 +1,30 @@
-import React, { type ComponentPropsWithoutRef } from 'react';
+import React, {
+  type ComponentPropsWithoutRef,
+  type CSSProperties,
+} from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { useFeatureFlag } from '../../hooks/useFeatureFlag';
-import { useLocalPref } from '../../hooks/useLocalPref';
-import { type CSSProperties, theme, styles } from '../../style';
-import { Menu } from '../common/Menu';
-import { Modal } from '../common/Modal';
-import { type CommonModalProps } from '../Modals';
+import { Menu } from '@actual-app/components/menu';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
 
-type BudgetPageMenuModalProps = ComponentPropsWithoutRef<
-  typeof BudgetPageMenu
-> & {
-  modalProps: CommonModalProps;
-};
+import {
+  Modal,
+  ModalCloseButton,
+  ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import { useLocalPref } from '@desktop-client/hooks/useLocalPref';
+import { type Modal as ModalType } from '@desktop-client/modals/modalsSlice';
+
+type BudgetPageMenuModalProps = Extract<
+  ModalType,
+  { name: 'budget-page-menu' }
+>['options'];
 
 export function BudgetPageMenuModal({
-  modalProps,
   onAddCategoryGroup,
   onToggleHiddenCategories,
   onSwitchBudgetFile,
-  onSwitchBudgetType,
 }: BudgetPageMenuModalProps) {
   const defaultMenuItemStyle: CSSProperties = {
     ...styles.mobileMenuItem,
@@ -28,14 +34,21 @@ export function BudgetPageMenuModal({
   };
 
   return (
-    <Modal showHeader focusAfterClose={false} {...modalProps}>
-      <BudgetPageMenu
-        getItemStyle={() => defaultMenuItemStyle}
-        onAddCategoryGroup={onAddCategoryGroup}
-        onToggleHiddenCategories={onToggleHiddenCategories}
-        onSwitchBudgetFile={onSwitchBudgetFile}
-        onSwitchBudgetType={onSwitchBudgetType}
-      />
+    <Modal name="budget-page-menu">
+      {({ state: { close } }) => (
+        <>
+          <ModalHeader
+            showLogo
+            rightContent={<ModalCloseButton onPress={close} />}
+          />
+          <BudgetPageMenu
+            getItemStyle={() => defaultMenuItemStyle}
+            onAddCategoryGroup={onAddCategoryGroup}
+            onToggleHiddenCategories={onToggleHiddenCategories}
+            onSwitchBudgetFile={onSwitchBudgetFile}
+          />
+        </>
+      )}
     </Modal>
   );
 }
@@ -47,17 +60,14 @@ type BudgetPageMenuProps = Omit<
   onAddCategoryGroup: () => void;
   onToggleHiddenCategories: () => void;
   onSwitchBudgetFile: () => void;
-  onSwitchBudgetType: () => void;
 };
 
 function BudgetPageMenu({
   onAddCategoryGroup,
   onToggleHiddenCategories,
   onSwitchBudgetFile,
-  onSwitchBudgetType,
   ...props
 }: BudgetPageMenuProps) {
-  const isReportBudgetEnabled = useFeatureFlag('reportBudget');
   const [showHiddenCategories] = useLocalPref('budget.showHiddenCategories');
 
   const onMenuSelect = (name: string) => {
@@ -74,13 +84,11 @@ function BudgetPageMenu({
       case 'switch-budget-file':
         onSwitchBudgetFile?.();
         break;
-      case 'switch-budget-type':
-        onSwitchBudgetType?.();
-        break;
       default:
         throw new Error(`Unrecognized menu item: ${name}`);
     }
   };
+  const { t } = useTranslation();
 
   return (
     <Menu
@@ -89,24 +97,16 @@ function BudgetPageMenu({
       items={[
         {
           name: 'add-category-group',
-          text: 'Add category group',
+          text: t('Add category group'),
         },
         {
           name: 'toggle-hidden-categories',
-          text: `${!showHiddenCategories ? 'Show' : 'Hide'} hidden categories`,
+          text: `${!showHiddenCategories ? t('Show hidden categories') : t('Hide hidden categories')}`,
         },
         {
           name: 'switch-budget-file',
-          text: 'Switch budget file',
+          text: t('Switch budget file'),
         },
-        ...(isReportBudgetEnabled
-          ? [
-              {
-                name: 'switch-budget-type',
-                text: 'Switch budget type',
-              },
-            ]
-          : []),
       ]}
     />
   );

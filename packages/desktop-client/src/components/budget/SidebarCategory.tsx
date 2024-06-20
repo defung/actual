@@ -1,19 +1,27 @@
 // @ts-strict-ignore
-import React, { type CSSProperties, type Ref, useRef, useState } from 'react';
+import React, { type CSSProperties, type Ref, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { Button } from '@actual-app/components/button';
+import { SvgCheveronDown } from '@actual-app/components/icons/v1';
+import { Menu } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
+import { TextOneLine } from '@actual-app/components/text-one-line';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 import {
   type CategoryGroupEntity,
   type CategoryEntity,
-} from 'loot-core/src/types/models';
+} from 'loot-core/types/models';
 
-import { SvgCheveronDown } from '../../icons/v1';
-import { theme } from '../../style';
-import { Button } from '../common/Button';
-import { Menu } from '../common/Menu';
-import { Popover } from '../common/Popover';
-import { View } from '../common/View';
-import { NotesButton } from '../NotesButton';
-import { InputCell } from '../table';
+import { CategoryAutomationButton } from './goals/CategoryAutomationButton';
+
+import { NotesButton } from '@desktop-client/components/NotesButton';
+import { InputCell } from '@desktop-client/components/table';
+import { useContextMenu } from '@desktop-client/hooks/useContextMenu';
+import { useFeatureFlag } from '@desktop-client/hooks/useFeatureFlag';
+import { useGlobalPref } from '@desktop-client/hooks/useGlobalPref';
 
 type SidebarCategoryProps = {
   innerRef: Ref<HTMLDivElement>;
@@ -22,12 +30,13 @@ type SidebarCategoryProps = {
   dragPreview?: boolean;
   dragging?: boolean;
   editing: boolean;
+  goalsShown?: boolean;
   style?: CSSProperties;
   borderColor?: string;
   isLast?: boolean;
-  onEditName: (id: string) => void;
+  onEditName: (id: CategoryEntity['id']) => void;
   onSave: (category: CategoryEntity) => void;
-  onDelete: (id: string) => Promise<void>;
+  onDelete: (id: CategoryEntity['id']) => Promise<void>;
   onHideNewCategory?: () => void;
 };
 
@@ -38,6 +47,7 @@ export function SidebarCategory({
   dragPreview,
   dragging,
   editing,
+  goalsShown = false,
   style,
   isLast,
   onEditName,
@@ -45,8 +55,14 @@ export function SidebarCategory({
   onDelete,
   onHideNewCategory,
 }: SidebarCategoryProps) {
+  const { t } = useTranslation();
+  const isGoalTemplatesUIEnabled = useFeatureFlag('goalTemplatesUIEnabled');
+  const [categoryExpandedStatePref] = useGlobalPref('categoryExpandedState');
+  const categoryExpandedState = categoryExpandedStatePref ?? 0;
+
   const temporary = category.id === 'new';
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { setMenuOpen, menuOpen, handleContextMenu, resetPosition, position } =
+    useContextMenu();
   const triggerRef = useRef(null);
 
   const displayed = (
@@ -57,28 +73,22 @@ export function SidebarCategory({
         userSelect: 'none',
         WebkitUserSelect: 'none',
         opacity: category.hidden || categoryGroup?.hidden ? 0.33 : undefined,
+        backgroundColor: 'transparent',
+        height: 20,
       }}
+      ref={triggerRef}
+      onContextMenu={handleContextMenu}
     >
-      <div
-        data-testid="category-name"
-        style={{
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          minWidth: 0,
-        }}
-      >
-        {category.name}
-      </div>
-      <View style={{ flexShrink: 0, marginLeft: 5 }} ref={triggerRef}>
+      <TextOneLine data-testid="category-name">{category.name}</TextOneLine>
+      <View style={{ flexShrink: 0, marginLeft: 5 }}>
         <Button
-          type="bare"
+          variant="bare"
           className="hover-visible"
-          onClick={e => {
-            e.stopPropagation();
+          style={{ color: 'currentColor', padding: 3 }}
+          onPress={() => {
+            resetPosition();
             setMenuOpen(true);
           }}
-          style={{ color: 'currentColor', padding: 3 }}
         >
           <SvgCheveronDown
             width={14}
@@ -92,7 +102,9 @@ export function SidebarCategory({
           placement="bottom start"
           isOpen={menuOpen}
           onOpenChange={() => setMenuOpen(false)}
-          style={{ width: 200 }}
+          style={{ width: 200, margin: 1 }}
+          isNonModal
+          {...position}
         >
           <Menu
             onMenuSelect={type => {
@@ -106,17 +118,25 @@ export function SidebarCategory({
               setMenuOpen(false);
             }}
             items={[
+              { name: 'rename', text: t('Rename') },
               !categoryGroup?.hidden && {
                 name: 'toggle-visibility',
-                text: category.hidden ? 'Show' : 'Hide',
+                text: category.hidden ? t('Show') : t('Hide'),
               },
-              { name: 'rename', text: 'Rename' },
-              { name: 'delete', text: 'Delete' },
+              { name: 'delete', text: t('Delete') },
             ]}
           />
         </Popover>
       </View>
       <View style={{ flex: 1 }} />
+      {!goalsShown && isGoalTemplatesUIEnabled && (
+        <View style={{ flexShrink: 0 }}>
+          <CategoryAutomationButton
+            style={dragging && { color: 'currentColor' }}
+            defaultColor={theme.pageTextLight}
+          />
+        </View>
+      )}
       <View style={{ flexShrink: 0 }}>
         <NotesButton
           id={category.id}
@@ -131,7 +151,7 @@ export function SidebarCategory({
     <View
       innerRef={innerRef}
       style={{
-        width: 200,
+        width: 200 + 100 * categoryExpandedState,
         overflow: 'hidden',
         '& .hover-visible': {
           display: 'none',
@@ -181,7 +201,7 @@ export function SidebarCategory({
         onBlur={() => onEditName(null)}
         style={{ paddingLeft: 13, ...(isLast && { borderBottomWidth: 0 }) }}
         inputProps={{
-          placeholder: temporary ? 'New Category Name' : '',
+          placeholder: temporary ? t('New category name') : '',
         }}
       />
     </View>

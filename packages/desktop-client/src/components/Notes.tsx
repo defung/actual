@@ -1,15 +1,20 @@
 // @ts-strict-ignore
 import React, { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 
-import { css } from 'glamor';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { type CSSProperties } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { css } from '@emotion/css';
+import rehypeExternalLinks from 'rehype-external-links';
 import remarkGfm from 'remark-gfm';
 
-import { useResponsive } from '../ResponsiveProvider';
-import { type CSSProperties, theme } from '../style';
-import { remarkBreaks, sequentialNewlinesPlugin } from '../util/markdown';
-
-import { Text } from './common/Text';
+import {
+  remarkBreaks,
+  sequentialNewlinesPlugin,
+} from '@desktop-client/util/markdown';
 
 const remarkPlugins = [sequentialNewlinesPlugin, remarkGfm, remarkBreaks];
 
@@ -75,6 +80,9 @@ const markdownStyles = css({
   '& td': {
     padding: '0.25rem 0.75rem',
   },
+  '& h3': {
+    fontSize: 15,
+  },
 });
 
 type NotesProps = {
@@ -95,8 +103,9 @@ export function Notes({
   getStyle,
 }: NotesProps) {
   const { isNarrowWidth } = useResponsive();
+  const { t } = useTranslation();
 
-  const textAreaRef = useRef<HTMLTextAreaElement>();
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (focused && editable) {
@@ -107,7 +116,7 @@ export function Notes({
   return editable ? (
     <textarea
       ref={textAreaRef}
-      className={`${css({
+      className={css({
         border: '1px solid ' + theme.buttonNormalBorder,
         padding: 7,
         ...(!isNarrowWidth && { minWidth: 350, minHeight: 120 }),
@@ -115,15 +124,23 @@ export function Notes({
         backgroundColor: theme.tableBackground,
         color: theme.tableText,
         ...getStyle?.(editable),
-      })}`}
+      })}
       value={notes || ''}
       onChange={e => onChange?.(e.target.value)}
       onBlur={e => onBlur?.(e.target.value)}
-      placeholder="Notes (markdown supported)"
+      placeholder={t('Notes (markdown supported)')}
     />
   ) : (
-    <Text {...markdownStyles} style={{ ...getStyle?.(editable) }}>
-      <ReactMarkdown remarkPlugins={remarkPlugins} linkTarget="_blank">
+    <Text className={css([markdownStyles, getStyle?.(editable)])}>
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={[
+          [
+            rehypeExternalLinks,
+            { target: '_blank', rel: ['noopener', 'noreferrer'] },
+          ],
+        ]}
+      >
         {notes}
       </ReactMarkdown>
     </Text>

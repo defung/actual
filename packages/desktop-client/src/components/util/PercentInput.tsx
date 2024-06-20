@@ -5,14 +5,15 @@ import React, {
   useEffect,
   type FocusEventHandler,
   type FocusEvent,
+  type CSSProperties,
 } from 'react';
 
-import { evalArithmetic } from 'loot-core/src/shared/arithmetic';
+import { Input } from '@actual-app/components/input';
 
-import { useMergedRefs } from '../../hooks/useMergedRefs';
-import { type CSSProperties } from '../../style';
-import { Input } from '../common/Input';
-import { useFormat } from '../spreadsheet/useFormat';
+import { evalArithmetic } from 'loot-core/shared/arithmetic';
+
+import { useFormat } from '@desktop-client/hooks/useFormat';
+import { useMergedRefs } from '@desktop-client/hooks/useMergedRefs';
 
 type PercentInputProps = {
   id?: string;
@@ -104,17 +105,12 @@ export function PercentInput({
   return (
     <Input
       id={id}
-      inputRef={mergedRef}
+      ref={mergedRef}
       inputMode="decimal"
       value={value}
       disabled={disabled}
-      focused={focused}
       style={{ flex: 1, alignItems: 'stretch', ...style }}
-      onKeyUp={e => {
-        if (e.key === 'Enter') {
-          fireUpdate();
-        }
-      }}
+      onEnter={fireUpdate}
       onChangeValue={onInputTextChange}
       onBlur={onInputAmountBlur}
       onFocus={onFocus}

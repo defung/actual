@@ -1,35 +1,36 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { mapField, friendlyOp } from 'loot-core/src/shared/rules';
-import { integerToCurrency } from 'loot-core/src/shared/util';
-import {
-  type RuleConditionOp,
-  type RuleConditionEntity,
-} from 'loot-core/src/types/models';
+import { Button } from '@actual-app/components/button';
+import { SvgDelete } from '@actual-app/components/icons/v0';
+import { Popover } from '@actual-app/components/popover';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { SvgDelete } from '../../icons/v0';
-import { type CSSProperties, theme } from '../../style';
-import { Button } from '../common/Button';
-import { Popover } from '../common/Popover';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { Value } from '../rules/Value';
+import { mapField, friendlyOp } from 'loot-core/shared/rules';
+import { integerToCurrency } from 'loot-core/shared/util';
+import { type RuleConditionEntity } from 'loot-core/types/models';
 
 import { FilterEditor } from './FiltersMenu';
 import { subfieldFromFilter } from './subfieldFromFilter';
 
-type FilterExpressionProps = {
-  field: string | undefined;
-  customName: string | undefined;
-  op: RuleConditionOp | undefined;
-  value: string | string[] | number | boolean | undefined;
-  options: RuleConditionEntity['options'];
+import { Value } from '@desktop-client/components/rules/Value';
+
+let isDatepickerClick = false;
+
+type FilterExpressionProps<T extends RuleConditionEntity> = {
+  field: T['field'];
+  customName: T['customName'];
+  op: T['op'];
+  value: T['value'];
+  options: T['options'];
   style?: CSSProperties;
-  onChange: (cond: RuleConditionEntity) => void;
+  onChange: (cond: T) => void;
   onDelete: () => void;
 };
 
-export function FilterExpression({
+export function FilterExpression<T extends RuleConditionEntity>({
   field: originalField,
   customName,
   op,
@@ -38,7 +39,8 @@ export function FilterExpression({
   style,
   onChange,
   onDelete,
-}: FilterExpressionProps) {
+}: FilterExpressionProps<T>) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const triggerRef = useRef(null);
 
@@ -58,12 +60,24 @@ export function FilterExpression({
     >
       <Button
         ref={triggerRef}
-        type="bare"
-        disabled={customName != null}
-        onClick={() => setEditing(true)}
-        style={{ marginRight: -7 }}
+        variant="bare"
+        isDisabled={customName != null}
+        onPress={() => setEditing(true)}
+        style={{
+          maxWidth: 'calc(100% - 26px)',
+          whiteSpace: 'nowrap',
+          display: 'block',
+        }}
       >
-        <div style={{ paddingBlock: 1, paddingLeft: 5, paddingRight: 2 }}>
+        <div
+          style={{
+            paddingBlock: 1,
+            paddingLeft: 5,
+            paddingRight: 2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
           {customName ? (
             <Text style={{ color: theme.pageTextPositive }}>{customName}</Text>
           ) : (
@@ -72,23 +86,29 @@ export function FilterExpression({
                 {mapField(field, options)}
               </Text>{' '}
               <Text>{friendlyOp(op, null)}</Text>{' '}
-              <Value
-                value={value}
-                field={field}
-                inline={true}
-                valueIsRaw={op === 'contains' || op === 'doesNotContain'}
-              />
+              {!['onbudget', 'offbudget'].includes(op?.toLocaleLowerCase()) && (
+                <Value
+                  value={value}
+                  field={field}
+                  inline={true}
+                  valueIsRaw={
+                    op === 'contains' ||
+                    op === 'matches' ||
+                    op === 'doesNotContain' ||
+                    op === 'hasTags'
+                  }
+                />
+              )}
             </>
           )}
         </div>
       </Button>
-      <Button type="bare" onClick={onDelete} aria-label="Delete filter">
+      <Button variant="bare" onPress={onDelete} aria-label={t('Delete filter')}>
         <SvgDelete
           style={{
             width: 8,
             height: 8,
-            margin: 5,
-            marginLeft: 3,
+            margin: 4,
           }}
         />
       </Button>
@@ -98,6 +118,21 @@ export function FilterExpression({
         placement="bottom start"
         isOpen={editing}
         onOpenChange={() => setEditing(false)}
+        shouldCloseOnInteractOutside={element => {
+          // Datepicker selections for some reason register 2x clicks
+          // We want to keep the popover open after selecting a date.
+          // So we ignore the "close" event on selection + the subsequent event.
+          if (element instanceof HTMLElement && element.dataset.pikaYear) {
+            isDatepickerClick = true;
+            return false;
+          }
+          if (isDatepickerClick) {
+            isDatepickerClick = false;
+            return false;
+          }
+
+          return true;
+        }}
         style={{ width: 275, padding: 15, color: theme.menuItemText }}
         data-testid="filters-menu-tooltip"
       >

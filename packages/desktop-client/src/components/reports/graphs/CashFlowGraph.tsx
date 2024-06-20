@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { theme } from '@actual-app/components/theme';
+import { css } from '@emotion/css';
 import * as d from 'date-fns';
-import { css } from 'glamor';
 import {
   Bar,
   CartesianGrid,
@@ -18,13 +21,12 @@ import {
 import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
-} from 'loot-core/src/shared/util';
+} from 'loot-core/shared/util';
 
-import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
-import { type CSSProperties, theme } from '../../../style';
-import { AlignedText } from '../../common/AlignedText';
-import { chartTheme } from '../chart-theme';
-import { Container } from '../Container';
+import { chartTheme } from '@desktop-client/components/reports/chart-theme';
+import { Container } from '@desktop-client/components/reports/Container';
+import { useLocale } from '@desktop-client/hooks/useLocale';
+import { usePrivacyMode } from '@desktop-client/hooks/usePrivacyMode';
 
 const MAX_BAR_SIZE = 50;
 const ANIMATION_DURATION = 1000; // in ms
@@ -34,7 +36,10 @@ type CustomTooltipProps = TooltipProps<number, 'date'> & {
 };
 
 function CustomTooltip({ active, payload, isConcise }: CustomTooltipProps) {
-  if (!active || !payload) {
+  const locale = useLocale();
+  const { t } = useTranslation();
+
+  if (!active || !payload || !Array.isArray(payload) || !payload[0]) {
     return null;
   }
 
@@ -42,40 +47,48 @@ function CustomTooltip({ active, payload, isConcise }: CustomTooltipProps) {
 
   return (
     <div
-      className={`${css({
+      className={css({
         pointerEvents: 'none',
         borderRadius: 2,
         boxShadow: '0 1px 6px rgba(0, 0, 0, .20)',
         backgroundColor: theme.menuBackground,
         color: theme.menuItemText,
         padding: 10,
-      })}`}
+      })}
     >
       <div>
         <div style={{ marginBottom: 10 }}>
           <strong>
-            {d.format(data.date, isConcise ? 'MMMM yyyy' : 'MMMM dd, yyyy')}
+            {d.format(data.date, isConcise ? 'MMMM yyyy' : 'MMMM dd, yyyy', {
+              locale,
+            })}
           </strong>
         </div>
         <div style={{ lineHeight: 1.5 }}>
-          <AlignedText left="Income:" right={amountToCurrency(data.income)} />
           <AlignedText
-            left="Expenses:"
+            left={t('Income:')}
+            right={amountToCurrency(data.income)}
+          />
+          <AlignedText
+            left={t('Expenses:')}
             right={amountToCurrency(data.expenses)}
           />
           <AlignedText
-            left="Change:"
+            left={t('Change:')}
             right={
               <strong>{amountToCurrency(data.income + data.expenses)}</strong>
             }
           />
           {data.transfers !== 0 && (
             <AlignedText
-              left="Transfers:"
+              left={t('Transfers:')}
               right={amountToCurrency(data.transfers)}
             />
           )}
-          <AlignedText left="Balance:" right={amountToCurrency(data.balance)} />
+          <AlignedText
+            left={t('Balance:')}
+            right={amountToCurrency(data.balance)}
+          />
         </div>
       </div>
     </div>
@@ -99,6 +112,7 @@ export function CashFlowGraph({
   showBalance = true,
   style,
 }: CashFlowGraphProps) {
+  const locale = useLocale();
   const privacyMode = usePrivacyMode();
   const [yAxisIsHovered, setYAxisIsHovered] = useState(false);
 
@@ -126,7 +140,9 @@ export function CashFlowGraph({
               tick={{ fill: theme.reportsLabel }}
               tickFormatter={x => {
                 // eslint-disable-next-line rulesdir/typography
-                return d.format(x, isConcise ? "MMM ''yy" : 'MMM d');
+                return d.format(x, isConcise ? "MMM ''yy" : 'MMM d', {
+                  locale,
+                });
               }}
               minTickGap={50}
             />
@@ -144,7 +160,9 @@ export function CashFlowGraph({
             <Tooltip
               labelFormatter={x => {
                 // eslint-disable-next-line rulesdir/typography
-                return d.format(x, isConcise ? "MMM ''yy" : 'MMM d');
+                return d.format(x, isConcise ? "MMM ''yy" : 'MMM d', {
+                  locale,
+                });
               }}
               content={<CustomTooltip isConcise={isConcise} />}
               isAnimationActive={false}

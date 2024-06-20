@@ -1,14 +1,19 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import type { Theme } from 'loot-core/src/types/prefs';
+import { Button } from '@actual-app/components/button';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import {
+  SvgMoonStars,
+  SvgSun,
+  SvgSystem,
+} from '@actual-app/components/icons/v2';
+import { Menu } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
 
-import { SvgMoonStars, SvgSun, SvgSystem } from '../icons/v2';
-import { useResponsive } from '../ResponsiveProvider';
-import { type CSSProperties, themeOptions, useTheme } from '../style';
+import type { Theme } from 'loot-core/types/prefs';
 
-import { Button } from './common/Button';
-import { Menu } from './common/Menu';
-import { Popover } from './common/Popover';
+import { themeOptions, useTheme } from '@desktop-client/style';
 
 type ThemeSelectorProps = {
   style?: CSSProperties;
@@ -20,6 +25,7 @@ export function ThemeSelector({ style }: ThemeSelectorProps) {
   const triggerRef = useRef(null);
 
   const { isNarrowWidth } = useResponsive();
+  const { t } = useTranslation();
 
   const themeIcons = {
     light: SvgSun,
@@ -44,15 +50,16 @@ export function ThemeSelector({ style }: ThemeSelectorProps) {
     <>
       <Button
         ref={triggerRef}
-        type="bare"
-        aria-label="Switch theme"
-        onClick={() => setMenuOpen(true)}
+        variant="bare"
+        aria-label={t('Switch theme')}
+        onPress={() => setMenuOpen(true)}
         style={style}
       >
         <Icon style={{ width: 13, height: 13, color: 'inherit' }} />
       </Button>
 
       <Popover
+        offset={8}
         triggerRef={triggerRef}
         isOpen={menuOpen}
         onOpenChange={() => setMenuOpen(false)}

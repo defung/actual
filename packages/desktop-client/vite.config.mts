@@ -15,7 +15,7 @@ const addWatchers = (): Plugin => ({
   configureServer(server) {
     server.watcher
       .add([
-        path.resolve('../loot-core/lib-dist/*.js'),
+        path.resolve('../loot-core/lib-dist/electron/*.js'),
         path.resolve('../loot-core/lib-dist/browser/*.js'),
       ])
       .on('all', function () {
@@ -66,7 +66,7 @@ const injectShims = (): Plugin[] => {
 };
 
 // https://vitejs.dev/config/
-// eslint-disable-next-line import/no-default-export
+
 export default defineConfig(async ({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const devHeaders = {
@@ -103,13 +103,19 @@ export default defineConfig(async ({ mode }) => {
     ];
   }
 
+  const browserOpen = env.BROWSER_OPEN ? `//${env.BROWSER_OPEN}` : true;
+
   return {
     base: '/',
     envPrefix: 'REACT_APP_',
     build: {
+      terserOptions: {
+        compress: false,
+        mangle: false,
+      },
       target: 'es2022',
       sourcemap: true,
-      outDir: 'build',
+      outDir: mode === 'desktop' ? 'build-electron' : 'build',
       assetsDir: 'static',
       manifest: true,
       assetsInlineLimit: 0,
@@ -139,7 +145,7 @@ export default defineConfig(async ({ mode }) => {
         ? ['chrome', 'firefox', 'edge', 'browser', 'browserPrivate'].includes(
             env.BROWSER,
           )
-        : true,
+        : browserOpen,
       watch: {
         disableGlobbing: false,
       },
@@ -148,16 +154,24 @@ export default defineConfig(async ({ mode }) => {
       extensions: resolveExtensions,
     },
     plugins: [
-      // Macos electron (desktop) builds do not support PWA
+      // electron (desktop) builds do not support PWA
       mode === 'desktop'
         ? undefined
         : VitePWA({
-            registerType: 'autoUpdate',
+            registerType: 'prompt',
             workbox: {
               globPatterns: [
                 '**/*.{js,css,html,txt,wasm,sql,sqlite,ico,png,woff2,webmanifest}',
               ],
               ignoreURLParametersMatching: [/^v$/],
+              navigateFallback: '/index.html',
+              maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
+              navigateFallbackDenylist: [
+                /^\/account\/.*$/,
+                /^\/admin\/.*$/,
+                /^\/secret\/.*$/,
+                /^\/openid\/.*$/,
+              ],
             },
           }),
       injectShims(),
@@ -180,6 +194,10 @@ export default defineConfig(async ({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: './src/setupTests.js',
+      onConsoleLog(log: string, type: 'stdout' | 'stderr'): boolean | void {
+        // print only console.error
+        return type === 'stderr';
+      },
     },
   };
 });

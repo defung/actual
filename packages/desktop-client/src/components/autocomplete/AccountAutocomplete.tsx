@@ -4,20 +4,23 @@ import React, {
   type ComponentProps,
   type ComponentPropsWithoutRef,
   type ReactElement,
+  type CSSProperties,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { css } from 'glamor';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { styles } from '@actual-app/components/styles';
+import { TextOneLine } from '@actual-app/components/text-one-line';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { css, cx } from '@emotion/css';
 
-import { type AccountEntity } from 'loot-core/src/types/models';
-
-import { useAccounts } from '../../hooks/useAccounts';
-import { useResponsive } from '../../ResponsiveProvider';
-import { type CSSProperties, theme, styles } from '../../style';
-import { TextOneLine } from '../common/TextOneLine';
-import { View } from '../common/View';
+import { type AccountEntity } from 'loot-core/types/models';
 
 import { Autocomplete } from './Autocomplete';
 import { ItemHeader } from './ItemHeader';
+
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
 
 type AccountAutocompleteItem = AccountEntity;
 
@@ -44,6 +47,7 @@ function AccountList({
   renderAccountItemGroupHeader = defaultRenderAccountItemGroupHeader,
   renderAccountItem = defaultRenderAccountItem,
 }: AccountListProps) {
+  const { t } = useTranslation();
   let lastItem = null;
 
   return (
@@ -63,10 +67,10 @@ function AccountList({
 
           const group = `${
             item.closed
-              ? 'Closed Accounts'
+              ? t('Closed Accounts')
               : item.offbudget
-                ? 'Off Budget'
-                : 'For Budget'
+                ? t('Off budget')
+                : t('On budget')
           }`;
 
           lastItem = item;
@@ -122,13 +126,12 @@ export function AccountAutocomplete({
     .filter(item => {
       return includeClosedAccounts ? item : !item.closed;
     })
-    .sort((a, b) => {
-      if (a.closed === b.closed) {
-        return a.offbudget === b.offbudget ? 0 : a.offbudget ? 1 : -1;
-      } else {
-        return a.closed ? 1 : -1;
-      }
-    });
+    .sort(
+      (a, b) =>
+        a.closed - b.closed ||
+        a.offbudget - b.offbudget ||
+        a.sort_order - b.sort_order,
+    );
 
   return (
     <Autocomplete
@@ -207,8 +210,9 @@ function AccountItem({
       // * https://github.com/WebKit/WebKit/blob/58956cf59ba01267644b5e8fe766efa7aa6f0c5c/Source/WebCore/page/ios/ContentChangeObserver.cpp
       // * https://github.com/WebKit/WebKit/blob/58956cf59ba01267644b5e8fe766efa7aa6f0c5c/Source/WebKit/WebProcess/WebPage/ios/WebPageIOS.mm#L783
       role="button"
-      className={`${className} ${css([
-        {
+      className={cx(
+        className,
+        css({
           backgroundColor: highlighted
             ? theme.menuAutoCompleteBackgroundHover
             : 'transparent',
@@ -219,8 +223,8 @@ function AccountItem({
           paddingLeft: 20,
           borderRadius: embedded ? 4 : 0,
           ...narrowStyle,
-        },
-      ])}`}
+        }),
+      )}
       data-testid={`${item.name}-account-item`}
       data-highlighted={highlighted || undefined}
       {...props}

@@ -1,15 +1,21 @@
 import React from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
-import { useActions } from '../../hooks/useActions';
-import { styles, theme } from '../../style';
-import { Button } from '../common/Button';
-import { Link } from '../common/Link';
-import { Paragraph } from '../common/Paragraph';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
+import { Button } from '@actual-app/components/button';
+import { Paragraph } from '@actual-app/components/paragraph';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { createBudget } from '@desktop-client/budgets/budgetsSlice';
+import { Link } from '@desktop-client/components/common/Link';
+import { pushModal } from '@desktop-client/modals/modalsSlice';
+import { useDispatch } from '@desktop-client/redux';
 
 export function WelcomeScreen() {
-  const { createBudget, pushModal } = useActions();
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
 
   return (
     <View
@@ -21,39 +27,50 @@ export function WelcomeScreen() {
         marginBlock: 20,
       }}
     >
-      <Text style={styles.veryLargeText}>Let’s get started!</Text>
+      <Text style={styles.veryLargeText}>{t('Let’s get started!')}</Text>
       <View style={{ overflowY: 'auto' }}>
         <Paragraph>
-          Actual is a personal finance tool that focuses on beautiful design and
-          a slick user experience.{' '}
-          <strong>Editing your data should be as fast as possible.</strong> On
-          top of that, we want to provide powerful tools to allow you to do
-          whatever you want with your data.
+          <Trans>
+            Actual is a personal finance tool that focuses on beautiful design
+            and a slick user experience.{' '}
+            <strong>Editing your data should be as fast as possible.</strong> On
+            top of that, we want to provide powerful tools to allow you to do
+            whatever you want with your data.
+          </Trans>
         </Paragraph>
         <Paragraph>
-          Currently, Actual implements budgeting based on a{' '}
-          <Link
-            variant="external"
-            to="https://actualbudget.org/docs/budgeting/"
-            linkColor="purple"
-          >
-            monthly envelope system
-          </Link>
-          . Consider taking our{' '}
-          <Link
-            variant="external"
-            to="https://actualbudget.org/docs/tour/"
-            linkColor="purple"
-          >
-            guided tour
-          </Link>{' '}
-          to help you get your bearings, and check out the rest of the
-          documentation while you’re there to learn more about advanced topics.
+          <Trans>
+            Currently, Actual implements budgeting based on a{' '}
+            <Link
+              variant="external"
+              to="https://actualbudget.org/docs/budgeting/"
+              linkColor="purple"
+            >
+              monthly envelope system
+            </Link>
+            .
+          </Trans>{' '}
+          <Trans>
+            Consider taking our{' '}
+            <Link
+              variant="external"
+              to="https://actualbudget.org/docs/tour/"
+              linkColor="purple"
+            >
+              guided tour
+            </Link>{' '}
+            to help you get your bearings, and check out the rest of the
+            documentation while you’re there to learn more about advanced
+            topics.
+          </Trans>
         </Paragraph>
         <Paragraph style={{ color: theme.pageTextLight }}>
-          Get started by importing an existing budget file from Actual or
-          another budgeting app, create a demo budget file, or start fresh with
-          an empty budget. You can always create or import another budget later.
+          <Trans>
+            Get started by importing an existing budget file from Actual or
+            another budgeting app, create a demo budget file, or start fresh
+            with an empty budget. You can always create or import another budget
+            later.
+          </Trans>
         </Paragraph>
       </View>
       <View
@@ -64,7 +81,11 @@ export function WelcomeScreen() {
           flexShrink: 0,
         }}
       >
-        <Button onClick={() => pushModal('import')}>Import my budget</Button>
+        <Button
+          onPress={() => dispatch(pushModal({ modal: { name: 'import' } }))}
+        >
+          {t('Import my budget')}
+        </Button>
         <View
           style={{
             flexDirection: 'row',
@@ -72,11 +93,15 @@ export function WelcomeScreen() {
             gap: 10,
           }}
         >
-          <Button onClick={() => createBudget({ testMode: true })}>
-            View demo
+          <Button onPress={() => dispatch(createBudget({ testMode: true }))}>
+            {t('View demo')}
           </Button>
-          <Button type="primary" onClick={() => createBudget()}>
-            Start fresh
+          <Button
+            variant="primary"
+            autoFocus
+            onPress={() => dispatch(createBudget({}))}
+          >
+            {t('Start fresh')}
           </Button>
         </View>
       </View>

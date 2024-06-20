@@ -1,9 +1,11 @@
 import React from 'react';
+import { Trans } from 'react-i18next';
 
-import { Link } from '../common/Link';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { useServerURL } from '../ServerContext';
+import { Text } from '@actual-app/components/text';
+import { View } from '@actual-app/components/view';
+
+import { Link } from '@desktop-client/components/common/Link';
+import { useServerURL } from '@desktop-client/components/ServerContext';
 
 export function ServerURL() {
   const url = useServerURL();
@@ -23,15 +25,17 @@ export function ServerURL() {
     >
       <Text>
         {url ? (
-          <>
+          <Trans>
             Using server: <strong>{url}</strong>
-          </>
+          </Trans>
         ) : (
-          <strong>No server configured</strong>
+          <Trans>
+            <strong>No server configured</strong>
+          </Trans>
         )}
       </Text>
-      <Link to="/config-server" style={{ marginLeft: 15 }}>
-        Change
+      <Link variant="internal" to="/config-server" style={{ marginLeft: 15 }}>
+        <Trans>Change</Trans>
       </Link>
     </View>
   );

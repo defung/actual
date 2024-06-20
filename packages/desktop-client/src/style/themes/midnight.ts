@@ -1,4 +1,5 @@
-import * as colorPalette from '../palette';
+// eslint-disable-next-line no-restricted-imports
+import * as colorPalette from '@desktop-client/style/palette';
 
 export const pageBackground = colorPalette.gray600;
 export const pageBackgroundModalActive = colorPalette.gray700;
@@ -76,6 +77,7 @@ export const mobileNavItem = colorPalette.gray150;
 export const mobileNavItemSelected = colorPalette.purple200;
 export const mobileAccountShadow = cardShadow;
 export const mobileAccountText = colorPalette.blue800;
+export const mobileTransactionSelected = colorPalette.purple300;
 
 // Mobile view themes (for the top bar)
 export const mobileViewTheme = mobileHeaderBackground;
@@ -173,10 +175,12 @@ export const formInputTextSelection = colorPalette.gray800;
 export const formInputShadowSelected = colorPalette.purple400;
 export const formInputTextHighlight = colorPalette.purple200;
 export const checkboxText = tableText;
-export const checkboxToggleBackground = colorPalette.gray400;
 export const checkboxBackgroundSelected = colorPalette.purple300;
 export const checkboxBorderSelected = colorPalette.purple300;
 export const checkboxShadowSelected = colorPalette.purple500;
+export const checkboxToggleBackground = colorPalette.gray400;
+export const checkboxToggleBackgroundSelected = colorPalette.purple300;
+export const checkboxToggleDisabled = colorPalette.gray700;
 
 export const pillBackground = colorPalette.gray500;
 export const pillBackgroundLight = colorPalette.gray900;
@@ -192,5 +196,25 @@ export const pillTextSubdued = colorPalette.gray500;
 export const reportsRed = colorPalette.red300;
 export const reportsBlue = colorPalette.blue400;
 export const reportsGreen = colorPalette.green400;
+export const reportsGray = colorPalette.gray400;
 export const reportsLabel = pageText;
 export const reportsInnerLabel = colorPalette.navy800;
+
+export const noteTagBackground = colorPalette.purple800;
+export const noteTagBackgroundHover = colorPalette.purple600;
+export const noteTagText = colorPalette.purple100;
+
+export const budgetOtherMonth = colorPalette.gray700;
+export const budgetCurrentMonth = tableBackground;
+export const budgetHeaderOtherMonth = colorPalette.gray800;
+export const budgetHeaderCurrentMonth = tableHeaderBackground;
+
+export const floatingActionBarBackground = colorPalette.gray900;
+export const floatingActionBarBorder = colorPalette.purple300;
+export const floatingActionBarText = colorPalette.purple200;
+
+export const tooltipText = colorPalette.gray100;
+export const tooltipBackground = colorPalette.gray800;
+export const tooltipBorder = colorPalette.gray600;
+
+export const calendarCellBackground = colorPalette.navy900;

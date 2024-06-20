@@ -1,53 +1,71 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useDispatch } from 'react-redux';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
-import { pushModal } from 'loot-core/client/actions';
+import { Button } from '@actual-app/components/button';
+import { styles } from '@actual-app/components/styles';
+import { View } from '@actual-app/components/view';
 
-import { useCategories } from '../../hooks/useCategories';
-import { useInitialMount } from '../../hooks/useInitialMount';
-import { styles } from '../../style';
-import { addToBeBudgetedGroup } from '../budget/util';
-import { Button } from '../common/Button';
-import { Modal } from '../common/Modal';
-import { View } from '../common/View';
-import { FieldLabel, TapField } from '../mobile/MobileForms';
-import { type CommonModalProps } from '../Modals';
+import {
+  addToBeBudgetedGroup,
+  removeCategoriesFromGroups,
+} from '@desktop-client/components/budget/util';
+import {
+  Modal,
+  ModalCloseButton,
+  ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import {
+  FieldLabel,
+  TapField,
+} from '@desktop-client/components/mobile/MobileForms';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import {
+  type Modal as ModalType,
+  pushModal,
+} from '@desktop-client/modals/modalsSlice';
+import { useDispatch } from '@desktop-client/redux';
 
-type CoverModalProps = {
-  modalProps: CommonModalProps;
-  title: string;
-  month: string;
-  showToBeBudgeted?: boolean;
-  onSubmit: (categoryId: string) => void;
-};
+type CoverModalProps = Extract<ModalType, { name: 'cover' }>['options'];
 
 export function CoverModal({
-  modalProps,
   title,
+  categoryId,
   month,
   showToBeBudgeted = true,
   onSubmit,
 }: CoverModalProps) {
+  const { t } = useTranslation();
+
   const { grouped: originalCategoryGroups } = useCategories();
   const [categoryGroups, categories] = useMemo(() => {
-    let expenseGroups = originalCategoryGroups.filter(g => !g.is_income);
-    expenseGroups = showToBeBudgeted
+    const expenseGroups = originalCategoryGroups.filter(g => !g.is_income);
+    const categoryGroups = showToBeBudgeted
       ? addToBeBudgetedGroup(expenseGroups)
       : expenseGroups;
-    const expenseCategories = expenseGroups.flatMap(g => g.categories || []);
-    return [expenseGroups, expenseCategories];
-  }, [originalCategoryGroups, showToBeBudgeted]);
+    const filteredCategoryGroups = categoryId
+      ? removeCategoriesFromGroups(categoryGroups, categoryId)
+      : categoryGroups;
+    const filteredCategoryies = filteredCategoryGroups.flatMap(
+      g => g.categories || [],
+    );
+    return [filteredCategoryGroups, filteredCategoryies];
+  }, [categoryId, originalCategoryGroups, showToBeBudgeted]);
 
   const [fromCategoryId, setFromCategoryId] = useState<string | null>(null);
   const dispatch = useDispatch();
 
   const onCategoryClick = useCallback(() => {
     dispatch(
-      pushModal('category-autocomplete', {
-        categoryGroups,
-        month,
-        onSelect: categoryId => {
-          setFromCategoryId(categoryId);
+      pushModal({
+        modal: {
+          name: 'category-autocomplete',
+          options: {
+            categoryGroups,
+            month,
+            onSelect: categoryId => {
+              setFromCategoryId(categoryId);
+            },
+          },
         },
       }),
     );
@@ -57,46 +75,47 @@ export function CoverModal({
     if (categoryId) {
       onSubmit?.(categoryId);
     }
-
-    modalProps.onClose();
   };
-
-  const initialMount = useInitialMount();
-
-  useEffect(() => {
-    if (initialMount) {
-      onCategoryClick();
-    }
-  }, [initialMount, onCategoryClick]);
 
   const fromCategory = categories.find(c => c.id === fromCategoryId);
 
   return (
-    <Modal title={title} showHeader focusAfterClose={false} {...modalProps}>
-      <View>
-        <FieldLabel title="Cover from category:" />
-        <TapField value={fromCategory?.name} onClick={onCategoryClick} />
-      </View>
+    <Modal name="cover">
+      {({ state: { close } }) => (
+        <>
+          <ModalHeader
+            title={title}
+            rightContent={<ModalCloseButton onPress={close} />}
+          />
+          <View>
+            <FieldLabel title={t('Cover from a category:')} />
+            <TapField value={fromCategory?.name} onPress={onCategoryClick} />
+          </View>
 
-      <View
-        style={{
-          justifyContent: 'center',
-          alignItems: 'center',
-          paddingTop: 10,
-        }}
-      >
-        <Button
-          type="primary"
-          style={{
-            height: styles.mobileMinHeight,
-            marginLeft: styles.mobileEditingPadding,
-            marginRight: styles.mobileEditingPadding,
-          }}
-          onClick={() => _onSubmit(fromCategoryId)}
-        >
-          Transfer
-        </Button>
-      </View>
+          <View
+            style={{
+              justifyContent: 'center',
+              alignItems: 'center',
+              paddingTop: 10,
+            }}
+          >
+            <Button
+              variant="primary"
+              style={{
+                height: styles.mobileMinHeight,
+                marginLeft: styles.mobileEditingPadding,
+                marginRight: styles.mobileEditingPadding,
+              }}
+              onPress={() => {
+                _onSubmit(fromCategoryId);
+                close();
+              }}
+            >
+              <Trans>Transfer</Trans>
+            </Button>
+          </View>
+        </>
+      )}
     </Modal>
   );
 }

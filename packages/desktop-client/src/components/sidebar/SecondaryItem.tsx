@@ -3,11 +3,12 @@ import React, {
   type ComponentType,
   type MouseEventHandler,
   type SVGProps,
+  type CSSProperties,
 } from 'react';
 
-import { theme, type CSSProperties } from '../../style';
-import { Block } from '../common/Block';
-import { View } from '../common/View';
+import { Block } from '@actual-app/components/block';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 import { accountNameStyle } from './Account';
 import { ItemContent } from './ItemContent';

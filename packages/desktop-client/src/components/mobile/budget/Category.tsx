@@ -1,20 +1,17 @@
 import React from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router';
 
-import * as monthUtils from 'loot-core/src/shared/months';
-
-import { useCategories } from '../../../hooks/useCategories';
-import { useLocalPref } from '../../../hooks/useLocalPref';
-import { useSetThemeColor } from '../../../hooks/useSetThemeColor';
-import { theme } from '../../../style';
+import * as monthUtils from 'loot-core/shared/months';
 
 import { CategoryTransactions } from './CategoryTransactions';
 
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
+
 export function Category() {
-  useSetThemeColor(theme.mobileViewTheme);
-  const [_numberFormat] = useLocalPref('numberFormat');
+  const [_numberFormat] = useSyncedPref('numberFormat');
   const numberFormat = _numberFormat || 'comma-dot';
-  const [hideFraction = false] = useLocalPref('hideFraction');
+  const [hideFraction] = useSyncedPref('hideFraction');
 
   const { id: categoryId } = useParams();
   const [searchParams] = useSearchParams();

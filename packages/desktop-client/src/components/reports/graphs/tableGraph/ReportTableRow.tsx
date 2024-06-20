@@ -1,25 +1,35 @@
-import React, { memo, type RefObject, type UIEventHandler } from 'react';
+import React, {
+  memo,
+  type RefObject,
+  type UIEventHandler,
+  type CSSProperties,
+} from 'react';
+
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 import {
   amountToCurrency,
   amountToInteger,
   integerToCurrency,
-} from 'loot-core/src/shared/util';
-import { type GroupedEntity } from 'loot-core/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
+} from 'loot-core/shared/util';
+import {
+  type balanceTypeOpType,
+  type GroupedEntity,
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
-import { useAccounts } from '../../../../hooks/useAccounts';
-import { useCategories } from '../../../../hooks/useCategories';
-import { useNavigate } from '../../../../hooks/useNavigate';
-import { useResponsive } from '../../../../ResponsiveProvider';
-import { type CSSProperties, theme } from '../../../../style';
-import { View } from '../../../common/View';
-import { Row, Cell } from '../../../table';
-import { showActivity } from '../showActivity';
+import { showActivity } from '@desktop-client/components/reports/graphs/showActivity';
+import { Row, Cell } from '@desktop-client/components/table';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
 
 type ReportTableRowProps = {
   item: GroupedEntity;
-  balanceTypeOp: 'totalAssets' | 'totalDebts' | 'totalTotals';
+  balanceTypeOp: balanceTypeOpType;
   groupBy: string;
   mode: string;
   filters?: RuleConditionEntity[];
@@ -33,7 +43,7 @@ type ReportTableRowProps = {
   showHiddenCategories?: boolean;
   showOffBudget?: boolean;
   interval: string;
-  totalScrollRef?: RefObject<HTMLDivElement>;
+  totalScrollRef?: RefObject<HTMLDivElement | null>;
   handleScroll?: UIEventHandler<HTMLDivElement>;
   height?: number;
 };
@@ -114,6 +124,7 @@ export const ReportTableRow = memo(
             style={{
               width: compact ? 80 : 125,
               flexShrink: 0,
+              flexGrow: 1,
             }}
             valueStyle={compactStyle}
           />
@@ -125,7 +136,9 @@ export const ReportTableRow = memo(
                     style={{
                       minWidth: compact ? 50 : 85,
                     }}
-                    linkStyle={hoverUnderline}
+                    unexposedContent={({ value }) => (
+                      <Text style={hoverUnderline}>{value}</Text>
+                    )}
                     valueStyle={compactStyle}
                     value={amountToCurrency(intervalItem[balanceTypeOp])}
                     title={
@@ -173,7 +186,9 @@ export const ReportTableRow = memo(
                     style={{
                       minWidth: compact ? 50 : 85,
                     }}
-                    linkStyle={hoverUnderline}
+                    unexposedContent={({ value }) => (
+                      <Text style={hoverUnderline}>{value}</Text>
+                    )}
                     valueStyle={compactStyle}
                     onClick={() =>
                       !isNarrowWidth &&
@@ -208,7 +223,9 @@ export const ReportTableRow = memo(
                     style={{
                       minWidth: compact ? 50 : 85,
                     }}
-                    linkStyle={hoverUnderline}
+                    unexposedContent={({ value }) => (
+                      <Text style={hoverUnderline}>{value}</Text>
+                    )}
                     valueStyle={compactStyle}
                     onClick={() =>
                       !isNarrowWidth &&
@@ -244,7 +261,9 @@ export const ReportTableRow = memo(
               fontWeight: 600,
               minWidth: compact ? 50 : 85,
             }}
-            linkStyle={hoverUnderline}
+            unexposedContent={({ value }) => (
+              <Text style={hoverUnderline}>{value}</Text>
+            )}
             valueStyle={compactStyle}
             onClick={() =>
               !isNarrowWidth &&

@@ -1,11 +1,14 @@
 import React, { useRef, useEffect } from 'react';
+import { Form } from 'react-aria-components';
+import { useTranslation } from 'react-i18next';
 
-import { theme } from '../../style';
-import { Button } from '../common/Button';
-import { Input } from '../common/Input';
-import { Stack } from '../common/Stack';
-import { Text } from '../common/Text';
-import { FormField, FormLabel } from '../forms';
+import { Button } from '@actual-app/components/button';
+import { Input } from '@actual-app/components/input';
+import { Stack } from '@actual-app/components/stack';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+
+import { FormField, FormLabel } from '@desktop-client/components/forms';
 
 export function NameFilter({
   menuItem,
@@ -22,6 +25,7 @@ export function NameFilter({
   onAddUpdate: () => void;
   err: string | null;
 }) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -33,7 +37,12 @@ export function NameFilter({
   return (
     <>
       {menuItem !== 'update-filter' && (
-        <form>
+        <Form
+          onSubmit={e => {
+            e.preventDefault();
+            onAddUpdate();
+          }}
+        >
           <Stack
             direction="row"
             justify="flex-end"
@@ -42,29 +51,22 @@ export function NameFilter({
           >
             <FormField style={{ flex: 1 }}>
               <FormLabel
-                title="Filter Name"
+                title={t('Filter name')}
                 htmlFor="name-field"
                 style={{ userSelect: 'none' }}
               />
               <Input
                 id="name-field"
-                inputRef={inputRef}
+                ref={inputRef}
                 defaultValue={name || ''}
                 onChangeValue={setName}
               />
             </FormField>
-            <Button
-              type="primary"
-              style={{ marginTop: 18 }}
-              onClick={e => {
-                e.preventDefault();
-                onAddUpdate();
-              }}
-            >
-              {adding ? 'Add' : 'Update'}
+            <Button variant="primary" type="submit" style={{ marginTop: 18 }}>
+              {adding ? t('Add') : t('Update')}
             </Button>
           </Stack>
-        </form>
+        </Form>
       )}
       {err && (
         <Stack direction="row" align="center" style={{ padding: 10 }}>

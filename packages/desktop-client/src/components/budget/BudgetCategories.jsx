@@ -1,10 +1,8 @@
 import React, { memo, useState, useMemo } from 'react';
 
-import { useLocalPref } from '../../hooks/useLocalPref';
-import { theme, styles } from '../../style';
-import { View } from '../common/View';
-import { DropHighlightPosContext } from '../sort';
-import { Row } from '../table';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 import { ExpenseCategory } from './ExpenseCategory';
 import { ExpenseGroup } from './ExpenseGroup';
@@ -14,6 +12,10 @@ import { IncomeHeader } from './IncomeHeader';
 import { SidebarCategory } from './SidebarCategory';
 import { SidebarGroup } from './SidebarGroup';
 import { separateGroups } from './util';
+
+import { DropHighlightPosContext } from '@desktop-client/components/sort';
+import { Row } from '@desktop-client/components/table';
+import { useLocalPref } from '@desktop-client/hooks/useLocalPref';
 
 export const BudgetCategories = memo(
   ({
@@ -28,6 +30,7 @@ export const BudgetCategories = memo(
     onSaveGroup,
     onDeleteCategory,
     onDeleteGroup,
+    onApplyBudgetTemplatesInGroup,
     onReorderCategory,
     onReorderGroup,
   }) => {
@@ -214,7 +217,7 @@ export const BudgetCategories = memo(
                   <SidebarCategory
                     category={{
                       name: '',
-                      cat_group: newCategoryForGroup,
+                      group: newCategoryForGroup,
                       is_income:
                         newCategoryForGroup ===
                         categoryGroups.find(g => g.is_income).id,
@@ -245,6 +248,7 @@ export const BudgetCategories = memo(
                   onReorderCategory={onReorderCategory}
                   onToggleCollapse={onToggleCollapse}
                   onShowNewCategory={onShowNewCategory}
+                  onApplyBudgetTemplatesInGroup={onApplyBudgetTemplatesInGroup}
                 />
               );
               break;

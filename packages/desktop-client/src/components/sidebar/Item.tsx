@@ -4,11 +4,13 @@ import React, {
   type MouseEventHandler,
   type ReactNode,
   type SVGProps,
+  type CSSProperties,
 } from 'react';
 
-import { styles, theme, type CSSProperties } from '../../style';
-import { Block } from '../common/Block';
-import { View } from '../common/View';
+import { Block } from '@actual-app/components/block';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 import { ItemContent } from './ItemContent';
 
@@ -69,14 +71,14 @@ export function Item({
           ...(forceHover ? hoverStyle : {}),
           ':hover': hoverStyle,
         }}
-        to={to}
-        onClick={onClick}
+        forceActive={forceActive}
         activeStyle={{
           borderLeft: '4px solid ' + theme.sidebarItemTextSelected,
           paddingLeft: 19 + indent - 4,
           color: theme.sidebarItemTextSelected,
         }}
-        forceActive={forceActive}
+        to={to}
+        onClick={onClick}
       >
         {content}
       </ItemContent>

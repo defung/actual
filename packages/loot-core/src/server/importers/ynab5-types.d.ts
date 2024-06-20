@@ -1,5 +1,3 @@
-/* eslint-disable import/no-unused-modules */
-
 export namespace YNAB5 {
   export interface Budget {
     name?: string;
@@ -32,6 +30,7 @@ export namespace YNAB5 {
     id: string;
     name: string;
     deleted: boolean;
+    hidden: boolean;
   }
 
   interface Category {
@@ -39,6 +38,7 @@ export namespace YNAB5 {
     category_group_id: string;
     name: string;
     deleted: boolean;
+    hidden: boolean;
   }
 
   interface Transaction {

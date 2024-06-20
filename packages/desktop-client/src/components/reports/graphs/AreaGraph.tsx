@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { css } from 'glamor';
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { theme } from '@actual-app/components/theme';
+import { css } from '@emotion/css';
 import {
   AreaChart,
   Area,
@@ -15,32 +18,33 @@ import {
 import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
-} from 'loot-core/src/shared/util';
-import { type DataEntity } from 'loot-core/src/types/models/reports';
-
-import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
-import { useResponsive } from '../../../ResponsiveProvider';
-import { theme } from '../../../style';
-import { type CSSProperties } from '../../../style';
-import { AlignedText } from '../../common/AlignedText';
-import { Container } from '../Container';
+} from 'loot-core/shared/util';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+} from 'loot-core/types/models';
 
 import { adjustTextSize } from './adjustTextSize';
 import { renderCustomLabel } from './renderCustomLabel';
 
+import { Container } from '@desktop-client/components/reports/Container';
+import { usePrivacyMode } from '@desktop-client/hooks/usePrivacyMode';
+
 type PayloadItem = {
   payload: {
     date: string;
-    totalAssets: number | string;
-    totalDebts: number | string;
-    totalTotals: number | string;
+    totalAssets: number;
+    totalDebts: number;
+    netAssets: number;
+    netDebts: number;
+    totalTotals: number;
   };
 };
 
 type CustomTooltipProps = {
   active?: boolean;
   payload?: PayloadItem[];
-  balanceTypeOp: 'totalAssets' | 'totalTotals' | 'totalDebts';
+  balanceTypeOp: balanceTypeOpType;
 };
 
 const CustomTooltip = ({
@@ -48,10 +52,12 @@ const CustomTooltip = ({
   payload,
   balanceTypeOp,
 }: CustomTooltipProps) => {
+  const { t } = useTranslation();
+
   if (active && payload && payload.length) {
     return (
       <div
-        className={`${css({
+        className={css({
           zIndex: 1000,
           pointerEvents: 'none',
           borderRadius: 2,
@@ -59,7 +65,7 @@ const CustomTooltip = ({
           backgroundColor: theme.menuBackground,
           color: theme.menuItemText,
           padding: 10,
-        })}`}
+        })}
       >
         <div>
           <div style={{ marginBottom: 10 }}>
@@ -68,19 +74,31 @@ const CustomTooltip = ({
           <div style={{ lineHeight: 1.5 }}>
             {['totalAssets', 'totalTotals'].includes(balanceTypeOp) && (
               <AlignedText
-                left="Assets:"
+                left={t('Assets:')}
                 right={amountToCurrency(payload[0].payload.totalAssets)}
               />
             )}
             {['totalDebts', 'totalTotals'].includes(balanceTypeOp) && (
               <AlignedText
-                left="Debt:"
+                left={t('Debts:')}
                 right={amountToCurrency(payload[0].payload.totalDebts)}
+              />
+            )}
+            {['netAssets'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Net Assets:')}
+                right={amountToCurrency(payload[0].payload.netAssets)}
+              />
+            )}
+            {['netDebts'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Net Debts:')}
+                right={amountToCurrency(payload[0].payload.netDebts)}
               />
             )}
             {['totalTotals'].includes(balanceTypeOp) && (
               <AlignedText
-                left="Net:"
+                left={t('Net:')}
                 right={
                   <strong>
                     {amountToCurrency(payload[0].payload.totalTotals)}
@@ -123,7 +141,9 @@ const customLabel = ({
     ((typeof props.value === 'number' ? props.value : 0) > 0 ? 10 : -10);
   const textAnchor = props.index === 0 ? 'left' : 'middle';
   const display =
-    props.value !== 0 ? `${amountToCurrencyNoDecimal(props.value)}` : '';
+    typeof props.value !== 'string' && props.value !== 0
+      ? `${amountToCurrencyNoDecimal(props.value || 0)}`
+      : '';
   const textSize = adjustTextSize({ sized: width, type: 'area' });
 
   return renderCustomLabel(calcX, calcY, textAnchor, display, textSize);
@@ -132,9 +152,10 @@ const customLabel = ({
 type AreaGraphProps = {
   style?: CSSProperties;
   data: DataEntity;
-  balanceTypeOp: 'totalAssets' | 'totalTotals' | 'totalDebts';
+  balanceTypeOp: balanceTypeOpType;
   compact?: boolean;
   viewLabels: boolean;
+  showTooltip?: boolean;
 };
 
 export function AreaGraph({
@@ -143,9 +164,9 @@ export function AreaGraph({
   balanceTypeOp,
   compact,
   viewLabels,
+  showTooltip = true,
 }: AreaGraphProps) {
   const privacyMode = usePrivacyMode();
-  const { isNarrowWidth } = useResponsive();
   const dataMax = Math.max(...data.intervalData.map(i => i[balanceTypeOp]));
   const dataMin = Math.min(...data.intervalData.map(i => i[balanceTypeOp]));
 
@@ -232,7 +253,7 @@ export function AreaGraph({
                     tickSize={0}
                   />
                 )}
-                {(!isNarrowWidth || !compact) && (
+                {showTooltip && (
                   <Tooltip
                     content={<CustomTooltip balanceTypeOp={balanceTypeOp} />}
                     isAnimationActive={false}

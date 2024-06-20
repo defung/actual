@@ -1,63 +1,87 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { send, sendCatch } from 'loot-core/platform/client/fetch/index';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { type CustomReportEntity } from 'loot-core/types/models/reports';
+import { SvgExclamationSolid } from '@actual-app/components/icons/v1';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { Tooltip } from '@actual-app/components/tooltip';
+import { View } from '@actual-app/components/view';
 
-import { useAccounts } from '../../../hooks/useAccounts';
-import { useCategories } from '../../../hooks/useCategories';
-import { useLocalPref } from '../../../hooks/useLocalPref';
-import { usePayees } from '../../../hooks/usePayees';
-import { useResponsive } from '../../../ResponsiveProvider';
-import { styles } from '../../../style/index';
-import { theme } from '../../../style/theme';
-import { Block } from '../../common/Block';
-import { Text } from '../../common/Text';
-import { View } from '../../common/View';
-import { DateRange } from '../DateRange';
-import { ReportCard } from '../ReportCard';
+import { send, sendCatch } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { type CustomReportEntity } from 'loot-core/types/models';
 
 import { GetCardData } from './GetCardData';
-import { ListCardsPopover } from './ListCardsPopover';
+import { MissingReportCard } from './MissingReportCard';
 
-function index(data: CustomReportEntity[]): { [key: string]: boolean }[] {
-  return data.reduce((carry, report) => {
-    const reportId: string = report.id === undefined ? '' : report.id;
+import { DateRange } from '@desktop-client/components/reports/DateRange';
+import { ReportCard } from '@desktop-client/components/reports/ReportCard';
+import { ReportCardName } from '@desktop-client/components/reports/ReportCardName';
+import { calculateHasWarning } from '@desktop-client/components/reports/util';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { usePayees } from '@desktop-client/hooks/usePayees';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
+import { addNotification } from '@desktop-client/notifications/notificationsSlice';
+import { useDispatch } from '@desktop-client/redux';
 
-    return {
-      ...carry,
-      [reportId]: false,
-    };
-  }, []);
-}
+type CustomReportListCardsProps = {
+  isEditing?: boolean;
+  report?: CustomReportEntity;
+  onRemove: () => void;
+};
 
 export function CustomReportListCards({
-  reports,
-}: {
-  reports: CustomReportEntity[];
+  isEditing,
+  report,
+  onRemove,
+}: CustomReportListCardsProps) {
+  const { t } = useTranslation();
+
+  // It's possible for a dashboard to reference a non-existing
+  // custom report
+  if (!report) {
+    return (
+      <MissingReportCard isEditing={isEditing} onRemove={onRemove}>
+        {t('This custom report has been deleted.')}
+      </MissingReportCard>
+    );
+  }
+
+  return (
+    <CustomReportListCardsInner
+      isEditing={isEditing}
+      report={report}
+      onRemove={onRemove}
+    />
+  );
+}
+
+function CustomReportListCardsInner({
+  isEditing,
+  report,
+  onRemove,
+}: Omit<CustomReportListCardsProps, 'report'> & {
+  report: CustomReportEntity;
 }) {
-  const result: { [key: string]: boolean }[] = index(reports);
-  const [reportMenu, setReportMenu] = useState(result);
-  const [deleteMenuOpen, setDeleteMenuOpen] = useState(result);
-  const [nameMenuOpen, setNameMenuOpen] = useState(result);
-  const [err, setErr] = useState('');
-  const [name, setName] = useState('');
+  const dispatch = useDispatch();
+
+  const [nameMenuOpen, setNameMenuOpen] = useState(false);
   const [earliestTransaction, setEarliestTransaction] = useState('');
 
   const payees = usePayees();
   const accounts = useAccounts();
   const categories = useCategories();
-  const { isNarrowWidth } = useResponsive();
-  const [_firstDayOfWeekIdx] = useLocalPref('firstDayOfWeekIdx');
+
+  const hasWarning = calculateHasWarning(report.conditions ?? [], {
+    categories: categories.list,
+    payees,
+    accounts,
+  });
+
+  const [_firstDayOfWeekIdx] = useSyncedPref('firstDayOfWeekIdx');
   const firstDayOfWeekIdx = _firstDayOfWeekIdx || '0';
-
-  const [isCardHovered, setIsCardHovered] = useState('');
-
-  const onDelete = async (reportData: string) => {
-    setName('');
-    await send('report/delete', reportData);
-    onDeleteMenuOpen(reportData === undefined ? '' : reportData, false);
-  };
 
   useEffect(() => {
     async function run() {
@@ -67,188 +91,104 @@ export function CustomReportListCards({
     run();
   }, []);
 
-  const onAddUpdate = async ({
-    reportData,
-  }: {
-    reportData?: CustomReportEntity;
-  }) => {
-    if (!reportData) {
-      return null;
-    }
-
+  const onSaveName = async (name: string) => {
     const updatedReport = {
-      ...reportData,
+      ...report,
       name,
     };
 
     const response = await sendCatch('report/update', updatedReport);
 
     if (response.error) {
-      setErr(response.error.message);
-      onNameMenuOpen(reportData.id === undefined ? '' : reportData.id, true);
+      dispatch(
+        addNotification({
+          notification: {
+            type: 'error',
+            message: `Failed saving report name: ${response.error.message}`,
+          },
+        }),
+      );
+      setNameMenuOpen(true);
       return;
     }
 
-    onNameMenuOpen(reportData.id === undefined ? '' : reportData.id, false);
+    setNameMenuOpen(false);
   };
 
-  const onMenuSelect = async (item: string, report: CustomReportEntity) => {
-    if (item === 'delete') {
-      onMenuOpen(report.id, false);
-      onDeleteMenuOpen(report.id, true);
-      setErr('');
-    }
-    if (item === 'rename') {
-      onMenuOpen(report.id, false);
-      onNameMenuOpen(report.id, true);
-      setName(report.name);
-      setErr('');
-    }
-  };
-
-  const onMenuOpen = (item: string, state: boolean) => {
-    setReportMenu({ ...reportMenu, [item]: state });
-  };
-
-  const onDeleteMenuOpen = (item: string, state: boolean) => {
-    setDeleteMenuOpen({ ...deleteMenuOpen, [item]: state });
-  };
-
-  const onNameMenuOpen = (item: string, state: boolean) => {
-    setNameMenuOpen({ ...nameMenuOpen, [item]: state });
-  };
-
-  const chunkSize = 3;
-
-  const groups = useMemo(() => {
-    return reports
-      .map((report: CustomReportEntity, i: number) => {
-        return i % chunkSize === 0 ? reports.slice(i, i + chunkSize) : null;
-      })
-      .filter(e => {
-        return e;
-      });
-  }, [reports]);
-
-  const remainder = 3 - (reports.length % 3);
-
-  if (reports.length === 0) return null;
   return (
-    <View>
-      {groups.map((group, i) => (
+    <ReportCard
+      isEditing={isEditing}
+      disableClick={nameMenuOpen}
+      to={`/reports/custom/${report.id}`}
+      menuItems={[
+        {
+          name: 'rename',
+          text: 'Rename',
+        },
+        {
+          name: 'remove',
+          text: 'Remove',
+        },
+      ]}
+      onMenuSelect={item => {
+        switch (item) {
+          case 'remove':
+            onRemove();
+            break;
+          case 'rename':
+            setNameMenuOpen(true);
+            break;
+        }
+      }}
+    >
+      <View style={{ flex: 1, padding: 10 }}>
         <View
-          key={i}
           style={{
-            flex: '0 0 auto',
-            flexDirection: isNarrowWidth ? 'column' : 'row',
+            flexShrink: 0,
+            paddingBottom: 5,
           }}
         >
-          {group &&
-            group.map((report, id) => (
-              <View
-                key={id}
-                style={
-                  !isNarrowWidth
-                    ? {
-                        position: 'relative',
-                        flex: '1',
-                      }
-                    : {
-                        position: 'relative',
-                      }
-                }
-              >
-                <View style={{ width: '100%', height: '100%' }}>
-                  <ReportCard to="/reports/custom" report={report}>
-                    <View
-                      style={{ flex: 1, padding: 10 }}
-                      onMouseEnter={() =>
-                        setIsCardHovered(
-                          report.id === undefined ? '' : report.id,
-                        )
-                      }
-                      onMouseLeave={() => {
-                        setIsCardHovered('');
-                        onMenuOpen(
-                          report.id === undefined ? '' : report.id,
-                          false,
-                        );
-                      }}
-                    >
-                      <View
-                        style={{
-                          flexShrink: 0,
-                          paddingBottom: 5,
-                        }}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Block
-                            style={{
-                              ...styles.mediumText,
-                              fontWeight: 500,
-                              marginBottom: 5,
-                            }}
-                            role="heading"
-                          >
-                            {report.name}
-                          </Block>
-                          {report.isDateStatic ? (
-                            <DateRange
-                              start={report.startDate}
-                              end={report.endDate}
-                            />
-                          ) : (
-                            <Text style={{ color: theme.pageTextSubdued }}>
-                              {report.dateRange}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                      <GetCardData
-                        report={report}
-                        payees={payees}
-                        accounts={accounts}
-                        categories={categories}
-                        earliestTransaction={earliestTransaction}
-                        firstDayOfWeekIdx={firstDayOfWeekIdx}
-                      />
-                    </View>
-                  </ReportCard>
-                </View>
-                <View
-                  style={{
-                    textAlign: 'right',
-                    position: 'absolute',
-                    right: 25,
-                    top: 25,
-                  }}
-                >
-                  <ListCardsPopover
-                    report={report}
-                    onMenuOpen={onMenuOpen}
-                    isCardHovered={isCardHovered}
-                    reportMenu={reportMenu}
-                    onMenuSelect={onMenuSelect}
-                    nameMenuOpen={nameMenuOpen}
-                    name={name}
-                    setName={setName}
-                    onAddUpdate={onAddUpdate}
-                    err={err}
-                    onNameMenuOpen={onNameMenuOpen}
-                    deleteMenuOpen={deleteMenuOpen}
-                    onDeleteMenuOpen={onDeleteMenuOpen}
-                    onDelete={onDelete}
-                  />
-                </View>
-              </View>
-            ))}
-          {remainder !== 3 &&
-            i + 1 === groups.length &&
-            [...Array(remainder)].map((e, i) => (
-              <View key={i} style={{ flex: 1 }} />
-            ))}
+          <View style={{ flex: 1 }}>
+            <ReportCardName
+              name={report.name}
+              isEditing={nameMenuOpen}
+              onChange={onSaveName}
+              onClose={() => setNameMenuOpen(false)}
+            />
+            {report.isDateStatic ? (
+              <DateRange start={report.startDate} end={report.endDate} />
+            ) : (
+              <Text style={{ color: theme.pageTextSubdued }}>
+                {report.dateRange}
+              </Text>
+            )}
+          </View>
         </View>
-      ))}
-    </View>
+        <GetCardData
+          report={report}
+          payees={payees}
+          accounts={accounts}
+          categories={categories}
+          earliestTransaction={earliestTransaction}
+          firstDayOfWeekIdx={firstDayOfWeekIdx}
+          showTooltip={!isEditing}
+        />
+      </View>
+      {hasWarning && (
+        <View style={{ padding: 5, position: 'absolute', bottom: 0 }}>
+          <Tooltip
+            content="The widget is configured to use a non-existing filter value (i.e. category/account/payee). Edit the filters used in this report widget to remove the warning."
+            placement="bottom start"
+            style={{ ...styles.tooltip, maxWidth: 300 }}
+          >
+            <SvgExclamationSolid
+              width={20}
+              height={20}
+              style={{ color: theme.warningText }}
+            />
+          </Tooltip>
+        </View>
+      )}
+    </ReportCard>
   );
 }

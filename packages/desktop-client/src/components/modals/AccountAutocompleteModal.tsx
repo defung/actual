@@ -1,29 +1,31 @@
-import React, { type ComponentPropsWithoutRef } from 'react';
+import React from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { useResponsive } from '../../ResponsiveProvider';
-import { theme } from '../../style';
-import { AccountAutocomplete } from '../autocomplete/AccountAutocomplete';
-import { ModalCloseButton, Modal, ModalTitle } from '../common/Modal';
-import { View } from '../common/View';
-import { SectionLabel } from '../forms';
-import { type CommonModalProps } from '../Modals';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-type AccountAutocompleteModalProps = {
-  modalProps: CommonModalProps;
-  autocompleteProps: ComponentPropsWithoutRef<typeof AccountAutocomplete>;
-  onClose: () => void;
-};
+import { AccountAutocomplete } from '@desktop-client/components/autocomplete/AccountAutocomplete';
+import {
+  ModalCloseButton,
+  Modal,
+  ModalTitle,
+  ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import { SectionLabel } from '@desktop-client/components/forms';
+import { type Modal as ModalType } from '@desktop-client/modals/modalsSlice';
+
+type AccountAutocompleteModalProps = Extract<
+  ModalType,
+  { name: 'account-autocomplete' }
+>['options'];
 
 export function AccountAutocompleteModal({
-  modalProps,
-  autocompleteProps,
+  onSelect,
+  includeClosedAccounts,
   onClose,
 }: AccountAutocompleteModalProps) {
-  const _onClose = () => {
-    modalProps.onClose();
-    onClose?.();
-  };
-
+  const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
   const defaultAutocompleteProps = {
     containerProps: { style: { height: isNarrowWidth ? '90vh' : 275 } },
@@ -31,51 +33,61 @@ export function AccountAutocompleteModal({
 
   return (
     <Modal
-      title={
-        <ModalTitle
-          title="Account"
-          getStyle={() => ({ color: theme.menuAutoCompleteText })}
-        />
-      }
+      name="account-autocomplete"
       noAnimation={!isNarrowWidth}
-      showHeader={isNarrowWidth}
-      focusAfterClose={false}
-      {...modalProps}
-      onClose={_onClose}
-      style={{
-        height: isNarrowWidth ? '85vh' : 275,
-        backgroundColor: theme.menuAutoCompleteBackground,
+      onClose={onClose}
+      containerProps={{
+        style: {
+          height: isNarrowWidth
+            ? 'calc(var(--visual-viewport-height) * 0.85)'
+            : 275,
+          backgroundColor: theme.menuAutoCompleteBackground,
+        },
       }}
-      CloseButton={props => (
-        <ModalCloseButton
-          {...props}
-          style={{ color: theme.menuAutoCompleteText }}
-        />
-      )}
     >
-      {() => (
-        <View>
-          {!isNarrowWidth && (
-            <SectionLabel
-              title="Account"
-              style={{
-                alignSelf: 'center',
-                color: theme.menuAutoCompleteText,
-                marginBottom: 10,
-              }}
+      {({ state: { close } }) => (
+        <>
+          {isNarrowWidth && (
+            <ModalHeader
+              title={
+                <ModalTitle
+                  title={t('Account')}
+                  getStyle={() => ({ color: theme.menuAutoCompleteText })}
+                />
+              }
+              rightContent={
+                <ModalCloseButton
+                  onPress={close}
+                  style={{ color: theme.menuAutoCompleteText }}
+                />
+              }
             />
           )}
-          <View style={{ flex: 1 }}>
-            <AccountAutocomplete
-              focused={true}
-              embedded={true}
-              closeOnBlur={false}
-              onClose={_onClose}
-              {...defaultAutocompleteProps}
-              {...autocompleteProps}
-            />
+          <View>
+            {!isNarrowWidth && (
+              <SectionLabel
+                title={t('Account')}
+                style={{
+                  alignSelf: 'center',
+                  color: theme.menuAutoCompleteText,
+                  marginBottom: 10,
+                }}
+              />
+            )}
+            <View style={{ flex: 1 }}>
+              <AccountAutocomplete
+                focused={true}
+                embedded={true}
+                closeOnBlur={false}
+                onClose={close}
+                {...defaultAutocompleteProps}
+                onSelect={onSelect}
+                includeClosedAccounts={includeClosedAccounts}
+                value={null}
+              />
+            </View>
           </View>
-        </View>
+        </>
       )}
     </Modal>
   );

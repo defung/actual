@@ -1,9 +1,12 @@
 import React from 'react';
 
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
+import { Stack } from '@actual-app/components/stack';
+import { View } from '@actual-app/components/view';
 
-import { Stack } from '../common/Stack';
-import { View } from '../common/View';
+import {
+  type TransactionFilterEntity,
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { AppliedFilters } from './AppliedFilters';
 import {
@@ -12,18 +15,18 @@ import {
 } from './SavedFilterMenuButton';
 
 export function FiltersStack({
-  filters,
+  conditions,
   conditionsOp,
   onUpdateFilter,
   onDeleteFilter,
   onClearFilters,
   onReloadSavedFilter,
   filterId,
-  filtersList,
-  onCondOpChange,
+  savedFilters,
+  onConditionsOpChange,
 }: {
-  filters: RuleConditionEntity[];
-  conditionsOp: string;
+  conditions: RuleConditionEntity[];
+  conditionsOp: 'and' | 'or';
   onUpdateFilter: (
     filter: RuleConditionEntity,
     newFilter: RuleConditionEntity,
@@ -31,9 +34,9 @@ export function FiltersStack({
   onDeleteFilter: (filter: RuleConditionEntity) => void;
   onClearFilters: () => void;
   onReloadSavedFilter: (savedFilter: SavedFilter, value?: string) => void;
-  filterId: SavedFilter;
-  filtersList: RuleConditionEntity[];
-  onCondOpChange: () => void;
+  filterId?: SavedFilter;
+  savedFilters: TransactionFilterEntity[];
+  onConditionsOpChange: (value: 'and' | 'or') => void;
 }) {
   return (
     <View>
@@ -44,20 +47,20 @@ export function FiltersStack({
         align="flex-start"
       >
         <AppliedFilters
-          filters={filters}
+          conditions={conditions}
           conditionsOp={conditionsOp}
-          onCondOpChange={onCondOpChange}
+          onConditionsOpChange={onConditionsOpChange}
           onUpdate={onUpdateFilter}
           onDelete={onDeleteFilter}
         />
         <View style={{ flex: 1 }} />
         <SavedFilterMenuButton
-          filters={filters}
+          conditions={conditions}
           conditionsOp={conditionsOp}
           filterId={filterId}
           onClearFilters={onClearFilters}
           onReloadSavedFilter={onReloadSavedFilter}
-          filtersList={filtersList}
+          savedFilters={savedFilters}
         />
       </Stack>
     </View>

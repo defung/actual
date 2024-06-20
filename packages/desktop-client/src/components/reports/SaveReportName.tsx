@@ -1,20 +1,23 @@
 import React, { type RefObject, useEffect } from 'react';
+import { Form } from 'react-aria-components';
+import { useTranslation } from 'react-i18next';
 
-import { type CustomReportEntity } from 'loot-core/types/models/reports';
+import { Button } from '@actual-app/components/button';
+import { Input } from '@actual-app/components/input';
+import { Stack } from '@actual-app/components/stack';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { theme } from '../../style';
-import { Button } from '../common/Button';
-import { Input } from '../common/Input';
-import { Stack } from '../common/Stack';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { FormField, FormLabel } from '../forms';
+import { type CustomReportEntity } from 'loot-core/types/models';
+
+import { FormField, FormLabel } from '@desktop-client/components/forms';
 
 type SaveReportNameProps = {
   menuItem: string;
   name: string;
   setName: (name: string) => void;
-  inputRef: RefObject<HTMLInputElement>;
+  inputRef: RefObject<HTMLInputElement | null>;
   onAddUpdate: ({
     menuChoice,
     reportData,
@@ -35,6 +38,8 @@ export function SaveReportName({
   err,
   report,
 }: SaveReportNameProps) {
+  const { t } = useTranslation();
+
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
@@ -44,7 +49,15 @@ export function SaveReportName({
   return (
     <>
       {menuItem !== 'update-report' && (
-        <form>
+        <Form
+          onSubmit={e => {
+            e.preventDefault();
+            onAddUpdate({
+              menuChoice: menuItem ?? undefined,
+              reportData: report ?? undefined,
+            });
+          }}
+        >
           <Stack
             direction="row"
             justify="flex-end"
@@ -53,33 +66,23 @@ export function SaveReportName({
           >
             <FormField style={{ flex: 1 }}>
               <FormLabel
-                title="Report Name"
+                title={t('Report Name')}
                 htmlFor="name-field"
                 style={{ userSelect: 'none' }}
               />
               <Input
                 value={name}
                 id="name-field"
-                inputRef={inputRef}
+                ref={inputRef}
                 onChangeValue={setName}
                 style={{ marginTop: 10 }}
               />
             </FormField>
-            <Button
-              type="primary"
-              style={{ marginTop: 30 }}
-              onClick={e => {
-                e.preventDefault();
-                onAddUpdate({
-                  menuChoice: menuItem ?? undefined,
-                  reportData: report ?? undefined,
-                });
-              }}
-            >
+            <Button variant="primary" type="submit" style={{ marginTop: 30 }}>
               {menuItem === 'save-report' ? 'Add' : 'Update'}
             </Button>
           </Stack>
-        </form>
+        </Form>
       )}
       {err !== '' ? (
         <Stack direction="row" align="center" style={{ padding: 10 }}>

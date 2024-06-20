@@ -11,7 +11,7 @@ module.exports = {
   target: 'node',
   devtool: 'source-map',
   output: {
-    path: path.resolve(path.join(__dirname, '/../lib-dist')),
+    path: path.resolve(path.join(__dirname, '/../lib-dist/electron')),
     filename: 'bundle.desktop.js',
     sourceMapFilename: 'bundle.desktop.js.map',
     libraryTarget: 'commonjs2',
@@ -27,8 +27,11 @@ module.exports = {
       '.json',
       'pegjs',
     ],
+    alias: {
+      handlebars: 'handlebars/dist/handlebars.js',
+    },
   },
-  externals: ['better-sqlite3', 'electron-log', 'node-fetch'],
+  externals: ['better-sqlite3'],
   plugins: [
     new webpack.IgnorePlugin({
       resourceRegExp: /original-fs/,

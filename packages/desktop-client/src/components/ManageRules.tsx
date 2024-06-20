@@ -7,34 +7,45 @@ import React, {
   type SetStateAction,
   type Dispatch,
 } from 'react';
-import { useDispatch } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 
-import { pushModal } from 'loot-core/src/client/actions/modals';
-import { initiallyLoadPayees } from 'loot-core/src/client/actions/queries';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as undo from 'loot-core/src/platform/client/undo';
-import { mapField, friendlyOp } from 'loot-core/src/shared/rules';
-import { describeSchedule } from 'loot-core/src/shared/schedules';
-import { type NewRuleEntity } from 'loot-core/src/types/models';
+import { Button } from '@actual-app/components/button';
+import { Stack } from '@actual-app/components/stack';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { useAccounts } from '../hooks/useAccounts';
-import { useCategories } from '../hooks/useCategories';
-import { usePayees } from '../hooks/usePayees';
-import { useSelected, SelectedProvider } from '../hooks/useSelected';
-import { theme } from '../style';
+import { send } from 'loot-core/platform/client/fetch';
+import * as undo from 'loot-core/platform/client/undo';
+import { getNormalisedString } from 'loot-core/shared/normalisation';
+import { q } from 'loot-core/shared/query';
+import { mapField, friendlyOp } from 'loot-core/shared/rules';
+import { describeSchedule } from 'loot-core/shared/schedules';
+import { type RuleEntity, type NewRuleEntity } from 'loot-core/types/models';
 
-import { Button } from './common/Button';
+import { InfiniteScrollWrapper } from './common/InfiniteScrollWrapper';
 import { Link } from './common/Link';
 import { Search } from './common/Search';
-import { Stack } from './common/Stack';
-import { Text } from './common/Text';
-import { View } from './common/View';
 import { RulesHeader } from './rules/RulesHeader';
 import { RulesList } from './rules/RulesList';
-import { SchedulesQuery } from './rules/SchedulesQuery';
-import { SimpleTable } from './rules/SimpleTable';
 
-function mapValue(field, value, { payees, categories, accounts }) {
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { usePayees } from '@desktop-client/hooks/usePayees';
+import { useSchedules } from '@desktop-client/hooks/useSchedules';
+import {
+  useSelected,
+  SelectedProvider,
+} from '@desktop-client/hooks/useSelected';
+import { pushModal } from '@desktop-client/modals/modalsSlice';
+import { initiallyLoadPayees } from '@desktop-client/queries/queriesSlice';
+import { useDispatch } from '@desktop-client/redux';
+
+function mapValue(
+  field,
+  value,
+  { payees = [], categories = [], accounts = [] },
+) {
   if (!value) return '';
 
   let object = null;
@@ -78,6 +89,11 @@ function ruleToString(rule, data) {
           data.payees.find(p => p.id === schedule._payee),
         ),
       ];
+    } else if (action.op === 'prepend-notes' || action.op === 'append-notes') {
+      return [
+        friendlyOp(action.op),
+        '“' + mapValue(action.field, action.value, data) + '”',
+      ];
     } else {
       return [];
     }
@@ -87,52 +103,55 @@ function ruleToString(rule, data) {
   );
 }
 
-type ManageRulesContentProps = {
+type ManageRulesProps = {
   isModal: boolean;
   payeeId: string | null;
   setLoading?: Dispatch<SetStateAction<boolean>>;
 };
 
-function ManageRulesContent({
+export function ManageRules({
   isModal,
   payeeId,
-  setLoading,
-}: ManageRulesContentProps) {
-  const [allRules, setAllRules] = useState([]);
+  setLoading = () => {},
+}: ManageRulesProps) {
+  const [allRules, setAllRules] = useState<RuleEntity[]>([]);
   const [page, setPage] = useState(0);
   const [filter, setFilter] = useState('');
   const dispatch = useDispatch();
 
-  const { data: schedules } = SchedulesQuery.useQuery();
+  const { schedules = [] } = useSchedules({
+    query: useMemo(() => q('schedules').select('*'), []),
+  });
   const { list: categories } = useCategories();
   const payees = usePayees();
   const accounts = useAccounts();
-  const state = {
-    payees,
-    accounts,
-    schedules,
-  };
   const filterData = useMemo(
     () => ({
-      ...state,
+      payees,
+      accounts,
+      schedules,
       categories,
     }),
-    [state, categories],
+    [payees, accounts, schedules, categories],
   );
 
-  const filteredRules = useMemo(
-    () =>
-      (filter === ''
-        ? allRules
-        : allRules.filter(rule =>
-            ruleToString(rule, filterData)
-              .toLowerCase()
-              .includes(filter.toLowerCase()),
+  const filteredRules = useMemo(() => {
+    const rules = allRules.filter(rule => {
+      const schedule = schedules.find(schedule => schedule.rule === rule.id);
+      return schedule ? schedule.completed === false : true;
+    });
+
+    return (
+      filter === ''
+        ? rules
+        : rules.filter(rule =>
+            getNormalisedString(ruleToString(rule, filterData)).includes(
+              getNormalisedString(filter),
+            ),
           )
-      ).slice(0, 100 + page * 50),
-    [allRules, filter, filterData, page],
-  );
-  const selectedInst = useSelected('manage-rules', allRules, []);
+    ).slice(0, 100 + page * 50);
+  }, [allRules, filter, filterData, page]);
+  const selectedInst = useSelected('manage-rules', filteredRules, []);
   const [hoveredRule, setHoveredRule] = useState(null);
 
   const onSearchChange = useCallback(
@@ -168,7 +187,7 @@ function ManageRulesContent({
     }
 
     if (payeeId) {
-      undo.setUndoState('openModal', 'manage-rules');
+      undo.setUndoState('openModal', { name: 'manage-rules', options: {} });
     }
 
     loadData();
@@ -182,28 +201,43 @@ function ManageRulesContent({
     setPage(page => page + 1);
   }
 
-  async function onDeleteSelected() {
+  const onDeleteSelected = useCallback(async () => {
     setLoading(true);
+
     const { someDeletionsFailed } = await send('rule-delete-all', [
       ...selectedInst.items,
     ]);
 
     if (someDeletionsFailed) {
-      alert('Some rules were not deleted because they are linked to schedules');
+      alert(
+        t('Some rules were not deleted because they are linked to schedules'),
+      );
     }
 
     await loadRules();
     selectedInst.dispatch({ type: 'select-none' });
     setLoading(false);
+  }, [selectedInst]);
+
+  async function onDeleteRule(id: string) {
+    setLoading(true);
+    await send('rule-delete', id);
+    await loadRules();
+    setLoading(false);
   }
 
   const onEditRule = useCallback(rule => {
     dispatch(
-      pushModal('edit-rule', {
-        rule,
-        onSave: async () => {
-          await loadRules();
-          setLoading(false);
+      pushModal({
+        modal: {
+          name: 'edit-rule',
+          options: {
+            rule,
+            onSave: async () => {
+              await loadRules();
+              setLoading(false);
+            },
+          },
         },
       }),
     );
@@ -232,11 +266,16 @@ function ManageRulesContent({
     };
 
     dispatch(
-      pushModal('edit-rule', {
-        rule,
-        onSave: async () => {
-          await loadRules();
-          setLoading(false);
+      pushModal({
+        modal: {
+          name: 'edit-rule',
+          options: {
+            rule,
+            onSave: async () => {
+              await loadRules();
+              setLoading(false);
+            },
+          },
         },
       }),
     );
@@ -245,6 +284,7 @@ function ManageRulesContent({
   const onHover = useCallback(id => {
     setHoveredRule(id);
   }, []);
+  const { t } = useTranslation();
 
   return (
     <SelectedProvider instance={selectedInst}>
@@ -266,32 +306,28 @@ function ManageRulesContent({
             }}
           >
             <Text>
-              Rules are always run in the order that you see them.{' '}
+              {t('Rules are always run in the order that you see them.')}{' '}
               <Link
                 variant="external"
                 to="https://actualbudget.org/docs/budgeting/rules/"
                 linkColor="muted"
               >
-                Learn more
+                {t('Learn more')}
               </Link>
             </Text>
           </View>
           <View style={{ flex: 1 }} />
           <Search
-            placeholder="Filter rules..."
+            placeholder={t('Filter rules...')}
             value={filter}
             onChange={onSearchChange}
           />
         </View>
         <View style={{ flex: 1 }}>
           <RulesHeader />
-          <SimpleTable
-            loadMore={loadMore}
-            // Hide the last border of the item in the table
-            style={{ marginBottom: -1 }}
-          >
+          <InfiniteScrollWrapper loadMore={loadMore}>
             {filteredRules.length === 0 ? (
-              <EmptyMessage text="No rules" style={{ marginTop: 15 }} />
+              <EmptyMessage text={t('No rules')} style={{ marginTop: 15 }} />
             ) : (
               <RulesList
                 rules={filteredRules}
@@ -299,9 +335,10 @@ function ManageRulesContent({
                 hoveredRule={hoveredRule}
                 onHover={onHover}
                 onEditRule={onEditRule}
+                onDeleteRule={rule => onDeleteRule(rule.id)}
               />
             )}
-          </SimpleTable>
+          </InfiniteScrollWrapper>
         </View>
         <View
           style={{
@@ -313,12 +350,12 @@ function ManageRulesContent({
         >
           <Stack direction="row" align="center" justify="flex-end" spacing={2}>
             {selectedInst.items.size > 0 && (
-              <Button onClick={onDeleteSelected}>
+              <Button onPress={onDeleteSelected}>
                 Delete {selectedInst.items.size} rules
               </Button>
             )}
-            <Button type="primary" onClick={onCreateRule}>
-              Create new rule
+            <Button variant="primary" onPress={onCreateRule}>
+              {t('Create new rule')}
             </Button>
           </Stack>
         </View>
@@ -341,27 +378,5 @@ function EmptyMessage({ text, style }) {
     >
       {text}
     </View>
-  );
-}
-
-type ManageRulesProps = {
-  isModal: boolean;
-  payeeId: string | null;
-  setLoading?: Dispatch<SetStateAction<boolean>>;
-};
-
-export function ManageRules({
-  isModal,
-  payeeId,
-  setLoading = () => {},
-}: ManageRulesProps) {
-  return (
-    <SchedulesQuery.Provider>
-      <ManageRulesContent
-        isModal={isModal}
-        payeeId={payeeId}
-        setLoading={setLoading}
-      />
-    </SchedulesQuery.Provider>
   );
 }

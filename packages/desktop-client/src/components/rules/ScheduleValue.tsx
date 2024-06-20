@@ -1,13 +1,17 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
-import { getPayeesById } from 'loot-core/src/client/reducers/queries';
-import { describeSchedule } from 'loot-core/src/shared/schedules';
-import { type ScheduleEntity } from 'loot-core/src/types/models';
+import { AnimatedLoading } from '@actual-app/components/icons/AnimatedLoading';
+import { View } from '@actual-app/components/view';
 
-import { usePayees } from '../../hooks/usePayees';
+import { q } from 'loot-core/shared/query';
+import { describeSchedule } from 'loot-core/shared/schedules';
+import { type ScheduleEntity } from 'loot-core/types/models';
 
-import { SchedulesQuery } from './SchedulesQuery';
 import { Value } from './Value';
+
+import { usePayees } from '@desktop-client/hooks/usePayees';
+import { useSchedules } from '@desktop-client/hooks/useSchedules';
+import { getPayeesById } from '@desktop-client/queries/queriesSlice';
 
 type ScheduleValueProps = {
   value: ScheduleEntity;
@@ -16,7 +20,16 @@ type ScheduleValueProps = {
 export function ScheduleValue({ value }: ScheduleValueProps) {
   const payees = usePayees();
   const byId = getPayeesById(payees);
-  const { data: schedules } = SchedulesQuery.useQuery();
+  const schedulesQuery = useMemo(() => q('schedules').select('*'), []);
+  const { schedules = [], isLoading } = useSchedules({ query: schedulesQuery });
+
+  if (isLoading) {
+    return (
+      <View aria-label="Loading..." style={{ display: 'inline-flex' }}>
+        <AnimatedLoading width={10} height={10} />
+      </View>
+    );
+  }
 
   return (
     <Value

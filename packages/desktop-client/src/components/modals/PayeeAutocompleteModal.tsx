@@ -1,74 +1,89 @@
-import React, { type ComponentPropsWithoutRef } from 'react';
+import React from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { useAccounts } from '../../hooks/useAccounts';
-import { usePayees } from '../../hooks/usePayees';
-import { useResponsive } from '../../ResponsiveProvider';
-import { theme } from '../../style';
-import { PayeeAutocomplete } from '../autocomplete/PayeeAutocomplete';
-import { ModalCloseButton, Modal, ModalTitle } from '../common/Modal';
-import { type CommonModalProps } from '../Modals';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { theme } from '@actual-app/components/theme';
 
-type PayeeAutocompleteModalProps = {
-  modalProps: CommonModalProps;
-  autocompleteProps: ComponentPropsWithoutRef<typeof PayeeAutocomplete>;
-  onClose: () => void;
-};
+import { PayeeAutocomplete } from '@desktop-client/components/autocomplete/PayeeAutocomplete';
+import {
+  ModalCloseButton,
+  Modal,
+  ModalTitle,
+  ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
+import { usePayees } from '@desktop-client/hooks/usePayees';
+import { type Modal as ModalType } from '@desktop-client/modals/modalsSlice';
+
+type PayeeAutocompleteModalProps = Extract<
+  ModalType,
+  { name: 'payee-autocomplete' }
+>['options'];
 
 export function PayeeAutocompleteModal({
-  modalProps,
-  autocompleteProps,
+  onSelect,
   onClose,
 }: PayeeAutocompleteModalProps) {
+  const { t } = useTranslation();
   const payees = usePayees() || [];
   const accounts = useAccounts() || [];
-
-  const _onClose = () => {
-    modalProps.onClose();
-    onClose?.();
-  };
+  const navigate = useNavigate();
 
   const { isNarrowWidth } = useResponsive();
   const defaultAutocompleteProps = {
     containerProps: { style: { height: isNarrowWidth ? '90vh' : 275 } },
   };
 
+  const onManagePayees = () => navigate('/payees');
+
   return (
     <Modal
-      title={
-        <ModalTitle
-          title="Payee"
-          getStyle={() => ({ color: theme.menuAutoCompleteText })}
-        />
-      }
+      name="payee-autocomplete"
       noAnimation={!isNarrowWidth}
-      showHeader={isNarrowWidth}
-      focusAfterClose={false}
-      {...modalProps}
-      onClose={_onClose}
-      style={{
-        height: isNarrowWidth ? '85vh' : 275,
-        backgroundColor: theme.menuAutoCompleteBackground,
+      onClose={onClose}
+      containerProps={{
+        style: {
+          height: isNarrowWidth
+            ? 'calc(var(--visual-viewport-height) * 0.85)'
+            : 275,
+          backgroundColor: theme.menuAutoCompleteBackground,
+        },
       }}
-      CloseButton={props => (
-        <ModalCloseButton
-          {...props}
-          style={{ color: theme.menuAutoCompleteText }}
-        />
-      )}
     >
-      {() => (
-        <PayeeAutocomplete
-          payees={payees}
-          accounts={accounts}
-          focused={true}
-          embedded={true}
-          closeOnBlur={false}
-          onClose={_onClose}
-          showManagePayees={false}
-          showMakeTransfer={!isNarrowWidth}
-          {...defaultAutocompleteProps}
-          {...autocompleteProps}
-        />
+      {({ state: { close } }) => (
+        <>
+          {isNarrowWidth && (
+            <ModalHeader
+              title={
+                <ModalTitle
+                  title={t('Payee')}
+                  getStyle={() => ({ color: theme.menuAutoCompleteText })}
+                />
+              }
+              rightContent={
+                <ModalCloseButton
+                  onPress={close}
+                  style={{ color: theme.menuAutoCompleteText }}
+                />
+              }
+            />
+          )}
+          <PayeeAutocomplete
+            payees={payees}
+            accounts={accounts}
+            focused={true}
+            embedded={true}
+            closeOnBlur={false}
+            onClose={close}
+            onManagePayees={onManagePayees}
+            showManagePayees={!isNarrowWidth}
+            showMakeTransfer={!isNarrowWidth}
+            {...defaultAutocompleteProps}
+            onSelect={onSelect}
+            value={null}
+          />
+        </>
       )}
     </Modal>
   );

@@ -1,90 +1,93 @@
 // @ts-strict-ignore
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { useNotes } from '../../hooks/useNotes';
-import { SvgCheck } from '../../icons/v2';
-import { Button } from '../common/Button';
-import { Modal } from '../common/Modal';
-import { View } from '../common/View';
-import { type CommonModalProps } from '../Modals';
-import { Notes } from '../Notes';
+import { Button } from '@actual-app/components/button';
+import { SvgCheck } from '@actual-app/components/icons/v2';
+import { View } from '@actual-app/components/view';
 
-type NotesModalProps = {
-  modalProps: CommonModalProps;
-  id: string;
-  name: string;
-  onSave: (id: string, notes: string) => void;
-};
+import {
+  Modal,
+  ModalCloseButton,
+  ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import { Notes } from '@desktop-client/components/Notes';
+import { useNotes } from '@desktop-client/hooks/useNotes';
+import { type Modal as ModalType } from '@desktop-client/modals/modalsSlice';
 
-export function NotesModal({ modalProps, id, name, onSave }: NotesModalProps) {
+type NotesModalProps = Extract<ModalType, { name: 'notes' }>['options'];
+
+export function NotesModal({ id, name, onSave }: NotesModalProps) {
+  const { t } = useTranslation();
   const originalNotes = useNotes(id);
 
   const [notes, setNotes] = useState(originalNotes);
   useEffect(() => setNotes(originalNotes), [originalNotes]);
 
-  function _onClose() {
-    modalProps?.onClose();
-  }
-
   function _onSave() {
     if (notes !== originalNotes) {
       onSave?.(id, notes);
     }
-
-    _onClose();
   }
 
   return (
     <Modal
-      title={`Notes: ${name}`}
-      showHeader
-      focusAfterClose={false}
-      {...modalProps}
-      onClose={_onClose}
-      style={{
-        height: '50vh',
+      name="notes"
+      containerProps={{
+        style: { height: '50vh' },
       }}
     >
-      <View
-        style={{
-          flex: 1,
-          flexDirection: 'column',
-        }}
-      >
-        <Notes
-          notes={notes}
-          editable={true}
-          focused={true}
-          getStyle={() => ({
-            borderRadius: 6,
-            flex: 1,
-            minWidth: 0,
-          })}
-          onChange={setNotes}
-        />
-        <View
-          style={{
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyItems: 'center',
-            width: '100%',
-            paddingTop: 10,
-          }}
-        >
-          <Button
-            type="primary"
+      {({ state: { close } }) => (
+        <>
+          <ModalHeader
+            title={t('Notes: {{name}}', { name })}
+            rightContent={<ModalCloseButton onPress={close} />}
+          />
+          <View
             style={{
-              fontSize: 17,
-              fontWeight: 400,
-              width: '100%',
+              flex: 1,
+              flexDirection: 'column',
             }}
-            onClick={_onSave}
           >
-            <SvgCheck width={17} height={17} style={{ paddingRight: 5 }} />
-            Save notes
-          </Button>
-        </View>
-      </View>
+            <Notes
+              notes={notes}
+              editable={true}
+              focused={true}
+              getStyle={() => ({
+                borderRadius: 6,
+                flex: 1,
+                minWidth: 0,
+              })}
+              onChange={setNotes}
+            />
+            <View
+              style={{
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyItems: 'center',
+                width: '100%',
+                paddingTop: 10,
+              }}
+            >
+              <Button
+                variant="primary"
+                style={{
+                  fontSize: 17,
+                  fontWeight: 400,
+                  width: '100%',
+                }}
+                onPress={() => {
+                  _onSave();
+                  close();
+                }}
+              >
+                <SvgCheck width={17} height={17} style={{ paddingRight: 5 }} />
+                {t('Save notes')}
+              </Button>
+            </View>
+          </View>
+        </>
+      )}
     </Modal>
   );
 }

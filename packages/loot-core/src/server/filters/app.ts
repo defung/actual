@@ -1,14 +1,13 @@
 // @ts-strict-ignore
 import { v4 as uuidv4 } from 'uuid';
 
-import { parseConditionsOrActions } from '../accounts/transaction-rules';
+import { TransactionFilterEntity } from '../../types/models';
 import { createApp } from '../app';
 import * as db from '../db';
 import { requiredFields } from '../models';
 import { mutator } from '../mutators';
+import { parseConditionsOrActions } from '../transactions/transaction-rules';
 import { undoable } from '../undo';
-
-import { FiltersHandlers } from './types/handlers';
 
 const filterModel = {
   validate(filter, { update }: { update?: boolean } = {}) {
@@ -42,7 +41,7 @@ const filterModel = {
 };
 
 async function filterNameExists(name, filterId, newItem) {
-  const idForName = await db.first(
+  const idForName = await db.first<Pick<db.DbTransactionFilter, 'id'>>(
     'SELECT id from transaction_filters WHERE tombstone = 0 AND name = ?',
     [name],
   );
@@ -56,53 +55,61 @@ async function filterNameExists(name, filterId, newItem) {
   return true;
 }
 
-//TODO: Possible to simplify this?
-//use filters and maps
 function conditionExists(item, filters, newItem) {
   const { conditions, conditionsOp } = item;
-  let condCheck = [];
-  let fCondCheck = false;
-  let fCondFound;
+  let fConditionFound = null;
 
-  filters.map(filter => {
+  filters.some(filter => {
     if (
-      !fCondCheck &&
-      //If conditions.length equals 1 then ignore conditionsOp
-      (conditions.length === 1 ? true : filter.conditionsOp === conditionsOp) &&
+      (conditions.length === 1 || filter.conditionsOp === conditionsOp) &&
       !filter.tombstone &&
       filter.conditions.length === conditions.length
     ) {
-      fCondCheck = false;
-      conditions.map((cond, i) => {
-        condCheck[i] =
-          filter.conditions.filter(fcond => {
-            return (
+      const allConditionsMatch = !conditions.some(
+        cond =>
+          !filter.conditions.some(
+            fcond =>
               cond.value === fcond.value &&
               cond.op === fcond.op &&
-              cond.field === fcond.field
-            );
-          }).length > 0;
-        fCondCheck = (i === 0 ? true : fCondCheck) && condCheck[i];
+              cond.field === fcond.field &&
+              filterOptionsMatch(cond.options, fcond.options),
+          ),
+      );
+
+      if (allConditionsMatch) {
+        fConditionFound = filter;
         return true;
-      });
-      fCondFound = fCondCheck && condCheck[conditions.length - 1] && filter;
+      }
     }
-    return true;
+    return false;
   });
 
-  condCheck = [];
-
   if (!newItem) {
-    return fCondFound
-      ? fCondFound.id !== item.id
-        ? fCondFound.name
+    return fConditionFound
+      ? fConditionFound.id !== item.id
+        ? fConditionFound.name
         : false
       : false;
   }
-  return fCondFound ? fCondFound.name : false;
+
+  return fConditionFound ? fConditionFound.name : false;
 }
 
-async function createFilter(filter) {
+function filterOptionsMatch(options1, options2) {
+  const opt1 = options1 ?? {};
+  const opt2 = options2 ?? {};
+
+  const keys1 = Object.keys(opt1);
+  const keys2 = Object.keys(opt2);
+
+  if (keys1.length !== keys2.length) {
+    return false;
+  }
+
+  return keys1.every(key => opt1[key] === opt2[key]);
+}
+
+async function createFilter(filter): Promise<TransactionFilterEntity['id']> {
   const filterId = uuidv4();
   const item = {
     id: filterId,
@@ -167,9 +174,15 @@ async function updateFilter(filter) {
   await db.updateWithSchema('transaction_filters', filterModel.fromJS(item));
 }
 
-async function deleteFilter(id) {
+async function deleteFilter(id: TransactionFilterEntity['id']) {
   await db.delete_('transaction_filters', id);
 }
+
+export type FiltersHandlers = {
+  'filter-create': typeof createFilter;
+  'filter-update': typeof updateFilter;
+  'filter-delete': typeof deleteFilter;
+};
 
 export const app = createApp<FiltersHandlers>();
 

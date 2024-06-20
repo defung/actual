@@ -1,48 +1,45 @@
 // @ts-strict-ignore
-import React, { type ReactElement, useEffect, useMemo } from 'react';
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend as Backend } from 'react-dnd-html5-backend';
-import { useSelector } from 'react-redux';
-import {
-  Route,
-  Routes,
-  Navigate,
-  BrowserRouter,
-  useLocation,
-  useHref,
-} from 'react-router-dom';
+import React, { type ReactElement, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Route, Routes, Navigate, useLocation, useHref } from 'react-router';
 
-import { SpreadsheetProvider } from 'loot-core/src/client/SpreadsheetProvider';
-import { type State } from 'loot-core/src/client/state-types';
-import { checkForUpdateNotification } from 'loot-core/src/client/update-notification';
-import * as undo from 'loot-core/src/platform/client/undo';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
-import { useAccounts } from '../hooks/useAccounts';
-import { useActions } from '../hooks/useActions';
-import { useNavigate } from '../hooks/useNavigate';
-import { useResponsive } from '../ResponsiveProvider';
-import { theme } from '../style';
-import { ExposeNavigate } from '../util/router-tools';
-import { getIsOutdated, getLatestVersion } from '../util/versions';
+import * as undo from 'loot-core/platform/client/undo';
 
+import { UserAccessPage } from './admin/UserAccess/UserAccessPage';
+import { BankSync } from './banksync';
 import { BankSyncStatus } from './BankSyncStatus';
-import { BudgetMonthCountProvider } from './budget/BudgetMonthCountContext';
-import { View } from './common/View';
+import { CommandBar } from './CommandBar';
 import { GlobalKeys } from './GlobalKeys';
 import { ManageRulesPage } from './ManageRulesPage';
 import { Category } from './mobile/budget/Category';
 import { MobileNavTabs } from './mobile/MobileNavTabs';
 import { TransactionEdit } from './mobile/transactions/TransactionEdit';
-import { Modals } from './Modals';
 import { Notifications } from './Notifications';
 import { ManagePayeesPage } from './payees/ManagePayeesPage';
 import { Reports } from './reports';
+import { LoadingIndicator } from './reports/LoadingIndicator';
 import { NarrowAlternate, WideComponent } from './responsive';
+import { UserDirectoryPage } from './responsive/wide';
 import { ScrollProvider } from './ScrollProvider';
+import { useMultiuserEnabled } from './ServerContext';
 import { Settings } from './settings';
 import { FloatableSidebar } from './sidebar';
-import { SidebarProvider } from './sidebar/SidebarProvider';
-import { Titlebar, TitlebarProvider } from './Titlebar';
+import { Titlebar } from './Titlebar';
+
+import { sync } from '@desktop-client/app/appSlice';
+import { ProtectedRoute } from '@desktop-client/auth/ProtectedRoute';
+import { Permissions } from '@desktop-client/auth/types';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useLocalPref } from '@desktop-client/hooks/useLocalPref';
+import { useMetaThemeColor } from '@desktop-client/hooks/useMetaThemeColor';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
+import { addNotification } from '@desktop-client/notifications/notificationsSlice';
+import { useSelector, useDispatch } from '@desktop-client/redux';
+import { getIsOutdated, getLatestVersion } from '@desktop-client/util/versions';
 
 function NarrowNotSupported({
   redirectTo = '/budget',
@@ -73,19 +70,6 @@ function WideNotSupported({ children, redirectTo = '/budget' }) {
 }
 
 function RouterBehaviors() {
-  const navigate = useNavigate();
-  const accounts = useAccounts();
-  const accountsLoaded = useSelector(
-    (state: State) => state.queries.accountsLoaded,
-  );
-  useEffect(() => {
-    // If there are no accounts, we want to redirect the user to
-    // the All Accounts screen which will prompt them to add an account
-    if (accountsLoaded && accounts.length === 0) {
-      navigate('/accounts');
-    }
-  }, [accountsLoaded, accounts]);
-
   const location = useLocation();
   const href = useHref(location);
   useEffect(() => {
@@ -95,54 +79,131 @@ function RouterBehaviors() {
   return null;
 }
 
-function FinancesAppWithoutContext() {
-  const actions = useActions();
+export function FinancesApp() {
+  const { isNarrowWidth } = useResponsive();
+  useMetaThemeColor(isNarrowWidth ? theme.mobileViewTheme : null);
+
+  const dispatch = useDispatch();
+  const { t } = useTranslation();
+
+  const accounts = useAccounts();
+  const accountsLoaded = useSelector(state => state.queries.accountsLoaded);
+
+  const [lastUsedVersion, setLastUsedVersion] = useLocalPref(
+    'flags.updateNotificationShownForVersion',
+  );
+
+  const multiuserEnabled = useMultiuserEnabled();
+
   useEffect(() => {
     // Wait a little bit to make sure the sync button will get the
     // sync start event. This can be improved later.
     setTimeout(async () => {
-      await actions.sync();
-
-      await checkForUpdateNotification(
-        actions.addNotification,
-        getIsOutdated,
-        getLatestVersion,
-        actions.loadPrefs,
-        actions.savePrefs,
-      );
+      await dispatch(sync());
     }, 100);
   }, []);
 
-  return (
-    <BrowserRouter>
-      <RouterBehaviors />
-      <ExposeNavigate />
+  useEffect(() => {
+    async function run() {
+      await global.Actual.waitForUpdateReadyForDownload();
+      dispatch(
+        addNotification({
+          notification: {
+            type: 'message',
+            title: t('A new version of Actual is available!'),
+            message: t(
+              'Click the button below to reload and apply the update.',
+            ),
+            sticky: true,
+            id: 'update-reload-notification',
+            button: {
+              title: t('Update now'),
+              action: async () => {
+                await global.Actual.applyAppUpdate();
+              },
+            },
+          },
+        }),
+      );
+    }
 
-      <View style={{ height: '100%' }}>
-        <GlobalKeys />
+    run();
+  }, []);
+
+  useEffect(() => {
+    async function run() {
+      const latestVersion = await getLatestVersion();
+      const isOutdated = await getIsOutdated(latestVersion);
+
+      if (isOutdated && lastUsedVersion !== latestVersion) {
+        dispatch(
+          addNotification({
+            notification: {
+              type: 'message',
+              title: t('A new version of Actual is available!'),
+              message:
+                (process.env.REACT_APP_IS_PIKAPODS ?? '').toLowerCase() ===
+                'true'
+                  ? t(
+                      'A new version of Actual is available! Your Pikapods instance will be automatically updated in the next few days - no action needed.',
+                    )
+                  : t(
+                      'Version {{latestVersion}} of Actual was recently released.',
+                      { latestVersion },
+                    ),
+              sticky: true,
+              id: 'update-notification',
+              button: {
+                title: t('Open changelog'),
+                action: () => {
+                  window.open('https://actualbudget.org/docs/releases');
+                },
+              },
+              onClose: () => {
+                setLastUsedVersion(latestVersion);
+              },
+            },
+          }),
+        );
+      }
+    }
+
+    run();
+  }, [lastUsedVersion, setLastUsedVersion]);
+
+  const scrollableRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <View style={{ height: '100%' }}>
+      <RouterBehaviors />
+      <GlobalKeys />
+      <CommandBar />
+      <View
+        style={{
+          flexDirection: 'row',
+          backgroundColor: theme.pageBackground,
+          flex: 1,
+        }}
+      >
+        <FloatableSidebar />
 
         <View
           style={{
-            flexDirection: 'row',
+            color: theme.pageText,
             backgroundColor: theme.pageBackground,
             flex: 1,
+            overflow: 'hidden',
+            width: '100%',
           }}
         >
-          <FloatableSidebar />
-
-          <View
-            style={{
-              color: theme.pageText,
-              backgroundColor: theme.pageBackground,
-              flex: 1,
-              overflow: 'hidden',
-              width: '100%',
-            }}
+          <ScrollProvider
+            isDisabled={!isNarrowWidth}
+            scrollableRef={scrollableRef}
           >
-            <div
+            <View
+              ref={scrollableRef}
               style={{
                 flex: 1,
-                display: 'flex',
                 overflow: 'auto',
                 position: 'relative',
               }}
@@ -161,7 +222,22 @@ function FinancesAppWithoutContext() {
               <BankSyncStatus />
 
               <Routes>
-                <Route path="/" element={<Navigate to="/budget" replace />} />
+                <Route
+                  path="/"
+                  element={
+                    accountsLoaded ? (
+                      accounts.length > 0 ? (
+                        <Navigate to="/budget" replace />
+                      ) : (
+                        // If there are no accounts, we want to redirect the user to
+                        // the All Accounts screen which will prompt them to add an account
+                        <Navigate to="/accounts" replace />
+                      )
+                    ) : (
+                      <LoadingIndicator />
+                    )
+                  }
+                />
 
                 <Route path="/reports/*" element={<Reports />} />
 
@@ -181,6 +257,7 @@ function FinancesAppWithoutContext() {
 
                 <Route path="/payees" element={<ManagePayeesPage />} />
                 <Route path="/rules" element={<ManageRulesPage />} />
+                <Route path="/bank-sync" element={<BankSync />} />
                 <Route path="/settings" element={<Settings />} />
 
                 <Route
@@ -219,13 +296,33 @@ function FinancesAppWithoutContext() {
                     </WideNotSupported>
                   }
                 />
-
+                {multiuserEnabled && (
+                  <Route
+                    path="/user-directory"
+                    element={
+                      <ProtectedRoute
+                        permission={Permissions.ADMINISTRATOR}
+                        element={<UserDirectoryPage />}
+                      />
+                    }
+                  />
+                )}
+                {multiuserEnabled && (
+                  <Route
+                    path="/user-access"
+                    element={
+                      <ProtectedRoute
+                        permission={Permissions.ADMINISTRATOR}
+                        validateOwner={true}
+                        element={<UserAccessPage />}
+                      />
+                    }
+                  />
+                )}
                 {/* redirect all other traffic to the budget page */}
                 <Route path="/*" element={<Navigate to="/budget" replace />} />
               </Routes>
-
-              <Modals />
-            </div>
+            </View>
 
             <Routes>
               <Route path="/budget" element={<MobileNavTabs />} />
@@ -234,27 +331,9 @@ function FinancesAppWithoutContext() {
               <Route path="/reports" element={<MobileNavTabs />} />
               <Route path="*" element={null} />
             </Routes>
-          </View>
+          </ScrollProvider>
         </View>
       </View>
-    </BrowserRouter>
-  );
-}
-
-export function FinancesApp() {
-  const app = useMemo(() => <FinancesAppWithoutContext />, []);
-
-  return (
-    <SpreadsheetProvider>
-      <TitlebarProvider>
-        <SidebarProvider>
-          <BudgetMonthCountProvider>
-            <DndProvider backend={Backend}>
-              <ScrollProvider>{app}</ScrollProvider>
-            </DndProvider>
-          </BudgetMonthCountProvider>
-        </SidebarProvider>
-      </TitlebarProvider>
-    </SpreadsheetProvider>
+    </View>
   );
 }

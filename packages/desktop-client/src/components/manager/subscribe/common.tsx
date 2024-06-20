@@ -1,19 +1,25 @@
 // @ts-strict-ignore
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router';
 
-import { send } from 'loot-core/src/platform/client/fetch';
+import { theme } from '@actual-app/components/theme';
 
-import { useNavigate } from '../../../hooks/useNavigate';
-import { theme } from '../../../style';
-import { useSetServerURL } from '../../ServerContext';
+import { send } from 'loot-core/platform/client/fetch';
+import { type Handlers } from 'loot-core/types/handlers';
+
+import {
+  useSetLoginMethods,
+  useSetMultiuserEnabled,
+  useSetServerURL,
+} from '@desktop-client/components/ServerContext';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
 
 // There are two URLs that dance with each other: `/login` and
 // `/bootstrap`. Both of these URLs check the state of the the server
 // and make sure the user is looking at the right page. For example,
 // it doesn't make sense to show the login page if the server doesn't
 // have any accounts yet. It also doesn't make sense to show the
-// bootstrap page if the server already has been setup with a
+// bootstrap page if the server already has been set up with a
 // password. Both pages will redirect to the other depending on state;
 // they will also potentially redirect to other pages which do *not*
 // do any checks.
@@ -22,6 +28,8 @@ export function useBootstrapped(redirect = true) {
   const navigate = useNavigate();
   const location = useLocation();
   const setServerURL = useSetServerURL();
+  const setMultiuserEnabled = useSetMultiuserEnabled();
+  const setLoginMethods = useSetLoginMethods();
 
   useEffect(() => {
     async function run() {
@@ -40,7 +48,9 @@ export function useBootstrapped(redirect = true) {
       if (url == null && !bootstrapped) {
         // A server hasn't been specified yet
         const serverURL = window.location.origin;
-        const result = await send('subscribe-needs-bootstrap', {
+        const result: Awaited<
+          ReturnType<Handlers['subscribe-needs-bootstrap']>
+        > = await send('subscribe-needs-bootstrap', {
           url: serverURL,
         });
 
@@ -52,17 +62,28 @@ export function useBootstrapped(redirect = true) {
 
         await setServerURL(serverURL, { validate: false });
 
+        setMultiuserEnabled(result.multiuser);
+        setLoginMethods(result.availableLoginMethods);
+
         if (result.bootstrapped) {
-          ensure(`/login/${result.loginMethod}`);
+          ensure(`/login`);
         } else {
           ensure('/bootstrap');
         }
       } else {
-        const result = await send('subscribe-needs-bootstrap');
+        const result: Awaited<
+          ReturnType<Handlers['subscribe-needs-bootstrap']>
+        > = await send('subscribe-needs-bootstrap');
+
         if ('error' in result) {
           navigate('/error', { state: { error: result.error } });
         } else if (result.bootstrapped) {
-          ensure(`/login/${result.loginMethod}`);
+          ensure(`/login`);
+
+          if ('hasServer' in result && result.hasServer) {
+            setMultiuserEnabled(result.multiuser);
+            setLoginMethods(result.availableLoginMethods);
+          }
         } else {
           ensure('/bootstrap');
         }

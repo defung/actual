@@ -1,7 +1,10 @@
 // @ts-strict-ignore
-import React, { useState } from 'react';
+import React, { useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { css } from 'glamor';
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { theme } from '@actual-app/components/theme';
+import { css } from '@emotion/css';
 import {
   BarChart,
   Bar,
@@ -18,25 +21,24 @@ import {
 import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
-} from 'loot-core/src/shared/util';
-import { type DataEntity } from 'loot-core/src/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
-
-import { useAccounts } from '../../../hooks/useAccounts';
-import { useCategories } from '../../../hooks/useCategories';
-import { useNavigate } from '../../../hooks/useNavigate';
-import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
-import { useResponsive } from '../../../ResponsiveProvider';
-import { type CSSProperties } from '../../../style';
-import { theme } from '../../../style/index';
-import { AlignedText } from '../../common/AlignedText';
-import { Container } from '../Container';
-import { getCustomTick } from '../getCustomTick';
-import { numberFormatterTooltip } from '../numberFormatter';
+} from 'loot-core/shared/util';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { adjustTextSize } from './adjustTextSize';
 import { renderCustomLabel } from './renderCustomLabel';
 import { showActivity } from './showActivity';
+
+import { Container } from '@desktop-client/components/reports/Container';
+import { getCustomTick } from '@desktop-client/components/reports/getCustomTick';
+import { numberFormatterTooltip } from '@desktop-client/components/reports/numberFormatter';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
+import { usePrivacyMode } from '@desktop-client/hooks/usePrivacyMode';
 
 type PayloadChild = {
   props: {
@@ -48,11 +50,13 @@ type PayloadChild = {
 type PayloadItem = {
   payload: {
     name: string;
-    totalAssets: number | string;
-    totalDebts: number | string;
-    totalTotals: number | string;
-    networth: number | string;
-    totalChange: number | string;
+    totalAssets: number;
+    totalDebts: number;
+    netAssets: number;
+    netDebts: number;
+    totalTotals: number;
+    networth: number;
+    totalChange: number;
     children: [PayloadChild];
   };
 };
@@ -60,7 +64,7 @@ type PayloadItem = {
 type CustomTooltipProps = {
   active?: boolean;
   payload?: PayloadItem[];
-  balanceTypeOp?: 'totalAssets' | 'totalDebts' | 'totalTotals';
+  balanceTypeOp?: balanceTypeOpType;
   yAxis?: string;
 };
 
@@ -70,10 +74,12 @@ const CustomTooltip = ({
   balanceTypeOp,
   yAxis,
 }: CustomTooltipProps) => {
+  const { t } = useTranslation();
+
   if (active && payload && payload.length) {
     return (
       <div
-        className={`${css({
+        className={css({
           zIndex: 1000,
           pointerEvents: 'none',
           borderRadius: 2,
@@ -81,7 +87,7 @@ const CustomTooltip = ({
           backgroundColor: theme.menuBackground,
           color: theme.menuItemText,
           padding: 10,
-        })}`}
+        })}
       >
         <div>
           <div style={{ marginBottom: 10 }}>
@@ -90,19 +96,31 @@ const CustomTooltip = ({
           <div style={{ lineHeight: 1.5 }}>
             {['totalAssets', 'totalTotals'].includes(balanceTypeOp) && (
               <AlignedText
-                left="Assets:"
+                left={t('Assets:')}
                 right={amountToCurrency(payload[0].payload.totalAssets)}
               />
             )}
             {['totalDebts', 'totalTotals'].includes(balanceTypeOp) && (
               <AlignedText
-                left="Debt:"
+                left={t('Debts:')}
                 right={amountToCurrency(payload[0].payload.totalDebts)}
+              />
+            )}
+            {['netAssets'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Net Assets:')}
+                right={amountToCurrency(payload[0].payload.netAssets)}
+              />
+            )}
+            {['netDebts'].includes(balanceTypeOp) && (
+              <AlignedText
+                left={t('Net Debts:')}
+                right={amountToCurrency(payload[0].payload.netDebts)}
               />
             )}
             {['totalTotals'].includes(balanceTypeOp) && (
               <AlignedText
-                left="Net:"
+                left={t('Net:')}
                 right={
                   <strong>
                     {amountToCurrency(payload[0].payload.totalTotals)}
@@ -137,11 +155,12 @@ type BarGraphProps = {
   data: DataEntity;
   filters: RuleConditionEntity[];
   groupBy: string;
-  balanceTypeOp: 'totalAssets' | 'totalDebts' | 'totalTotals';
+  balanceTypeOp: balanceTypeOpType;
   compact?: boolean;
   viewLabels: boolean;
   showHiddenCategories?: boolean;
   showOffBudget?: boolean;
+  showTooltip?: boolean;
 };
 
 export function BarGraph({
@@ -154,12 +173,12 @@ export function BarGraph({
   viewLabels,
   showHiddenCategories,
   showOffBudget,
+  showTooltip = true,
 }: BarGraphProps) {
   const navigate = useNavigate();
   const categories = useCategories();
   const accounts = useAccounts();
   const privacyMode = usePrivacyMode();
-  const { isNarrowWidth } = useResponsive();
   const [pointer, setPointer] = useState('');
 
   const yAxis = groupBy === 'Interval' ? 'date' : 'name';
@@ -167,11 +186,11 @@ export function BarGraph({
   const labelsMargin = viewLabels ? 30 : 0;
 
   const getVal = obj => {
-    if (balanceTypeOp === 'totalDebts') {
-      return -1 * obj.totalDebts;
-    } else {
-      return obj.totalAssets;
+    if (['totalDebts', 'netDebts'].includes(balanceTypeOp)) {
+      return -1 * obj[balanceTypeOp];
     }
+
+    return obj[balanceTypeOp];
   };
 
   const longestLabelLength = data[splitData]
@@ -209,7 +228,7 @@ export function BarGraph({
                   bottom: 0,
                 }}
               >
-                {(!isNarrowWidth || !compact) && (
+                {showTooltip && (
                   <Tooltip
                     cursor={{ fill: 'transparent' }}
                     content={
@@ -222,30 +241,32 @@ export function BarGraph({
                     isAnimationActive={false}
                   />
                 )}
+                {!compact && <CartesianGrid strokeDasharray="3 3" />}
                 {!compact && (
-                  <>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey={yAxis}
-                      angle={-35}
-                      textAnchor="end"
-                      height={Math.sqrt(longestLabelLength) * 25}
-                      tick={{ fill: theme.pageText }}
-                      tickLine={{ stroke: theme.pageText }}
-                    />
-                    <YAxis
-                      tickFormatter={value =>
-                        getCustomTick(
-                          amountToCurrencyNoDecimal(value),
-                          privacyMode,
-                        )
-                      }
-                      tick={{ fill: theme.pageText }}
-                      tickLine={{ stroke: theme.pageText }}
-                      tickSize={0}
-                    />
-                    <ReferenceLine y={0} stroke={theme.pageTextLight} />
-                  </>
+                  <XAxis
+                    dataKey={yAxis}
+                    angle={-35}
+                    textAnchor="end"
+                    height={Math.sqrt(longestLabelLength) * 25}
+                    tick={{ fill: theme.pageText }}
+                    tickLine={{ stroke: theme.pageText }}
+                  />
+                )}
+                {!compact && (
+                  <YAxis
+                    tickFormatter={value =>
+                      getCustomTick(
+                        amountToCurrencyNoDecimal(value),
+                        privacyMode,
+                      )
+                    }
+                    tick={{ fill: theme.pageText }}
+                    tickLine={{ stroke: theme.pageText }}
+                    tickSize={0}
+                  />
+                )}
+                {!compact && (
+                  <ReferenceLine y={0} stroke={theme.pageTextLight} />
                 )}
                 <Bar
                   dataKey={val => getVal(val)}
@@ -256,7 +277,7 @@ export function BarGraph({
                     setPointer('pointer')
                   }
                   onClick={item =>
-                    !isNarrowWidth &&
+                    ((compact && showTooltip) || !compact) &&
                     !['Group', 'Interval'].includes(groupBy) &&
                     showActivity({
                       navigate,
@@ -288,23 +309,6 @@ export function BarGraph({
                     />
                   ))}
                 </Bar>
-                {yAxis === 'date' && balanceTypeOp === 'totalTotals' && (
-                  <Bar dataKey="totalDebts" stackId="a">
-                    {viewLabels && !compact && (
-                      <LabelList
-                        dataKey="totalDebts"
-                        content={e => customLabel(e, balanceTypeOp)}
-                      />
-                    )}
-                    {data[splitData].map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={theme.reportsRed}
-                        name={entry.name}
-                      />
-                    ))}
-                  </Bar>
-                )}
               </BarChart>
             </div>
           </ResponsiveContainer>

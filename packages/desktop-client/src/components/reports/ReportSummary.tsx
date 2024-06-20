@@ -1,25 +1,32 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
-import * as monthUtils from 'loot-core/src/shared/months';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import * as monthUtils from 'loot-core/shared/months';
 import {
   amountToCurrency,
   integerToCurrency,
   amountToInteger,
-} from 'loot-core/src/shared/util';
-import { type DataEntity } from 'loot-core/src/types/models/reports';
-
-import { theme, styles } from '../../style';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { PrivacyFilter } from '../PrivacyFilter';
+} from 'loot-core/shared/util';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+} from 'loot-core/types/models';
 
 import { ReportOptions } from './ReportOptions';
+
+import { PrivacyFilter } from '@desktop-client/components/PrivacyFilter';
+import { useLocale } from '@desktop-client/hooks/useLocale';
 
 type ReportSummaryProps = {
   startDate: string;
   endDate: string;
   data: DataEntity;
-  balanceTypeOp: 'totalDebts' | 'totalAssets' | 'totalTotals';
+  balanceTypeOp: balanceTypeOpType;
   interval: string;
   intervalsCount: number;
 };
@@ -32,10 +39,16 @@ export function ReportSummary({
   interval,
   intervalsCount,
 }: ReportSummaryProps) {
+  const locale = useLocale();
+  const { t } = useTranslation();
   const net =
-    Math.abs(data.totalDebts) > Math.abs(data.totalAssets)
-      ? 'PAYMENT'
-      : 'DEPOSIT';
+    balanceTypeOp === 'netAssets'
+      ? 'DEPOSIT'
+      : balanceTypeOp === 'netDebts'
+        ? 'PAYMENT'
+        : Math.abs(data.totalDebts) > Math.abs(data.totalAssets)
+          ? 'PAYMENT'
+          : 'DEPOSIT';
   const average = amountToInteger(data[balanceTypeOp]) / intervalsCount;
   return (
     <View
@@ -63,19 +76,23 @@ export function ReportSummary({
           {monthUtils.format(
             startDate,
             ReportOptions.intervalFormat.get(interval) || '',
+            locale,
           )}
           {monthUtils.format(
             startDate,
             ReportOptions.intervalFormat.get(interval) || '',
+            locale,
           ) !==
             monthUtils.format(
               endDate,
               ReportOptions.intervalFormat.get(interval) || '',
+              locale,
             ) &&
-            ' to ' +
+            ` ${t('to')} ` +
               monthUtils.format(
                 endDate,
                 ReportOptions.intervalFormat.get(interval) || '',
+                locale,
               )}
         </Text>
       </View>
@@ -110,11 +127,9 @@ export function ReportSummary({
             fontWeight: 800,
           }}
         >
-          <PrivacyFilter blurIntensity={7}>
-            {amountToCurrency(data[balanceTypeOp])}
-          </PrivacyFilter>
+          <PrivacyFilter>{amountToCurrency(data[balanceTypeOp])}</PrivacyFilter>
         </Text>
-        <Text style={{ fontWeight: 600 }}>For this time period</Text>
+        <Text style={{ fontWeight: 600 }}>{t('For this time period')}</Text>
       </View>
       <View
         style={{
@@ -147,7 +162,7 @@ export function ReportSummary({
             fontWeight: 800,
           }}
         >
-          <PrivacyFilter blurIntensity={7}>
+          <PrivacyFilter>
             {!isNaN(average) && integerToCurrency(Math.round(average))}
           </PrivacyFilter>
         </Text>

@@ -3,6 +3,7 @@
 !data/.gitkeep
 /data2
 Actual-*
+!actual-server.js
 **/xcuserdata/*
 export-2020-01-10.csv
 
@@ -21,6 +22,7 @@ packages/api/dist
 packages/api/@types
 packages/crdt/dist
 packages/desktop-electron/client-build
+packages/desktop-electron/build
 packages/desktop-electron/.electron-symbols
 packages/desktop-electron/dist
 packages/desktop-electron/loot-core
@@ -49,3 +51,12 @@ bundle.mobile.js.map
 
 # Local Netlify folder
 .netlify
+
+# build output
+package.tgz
+
+# Fly.io configuration
+fly.toml
+
+# TypeScript cache
+build/

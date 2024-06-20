@@ -1,24 +1,52 @@
-// @ts-strict-ignore
-import React from 'react';
+import React, { type JSX } from 'react';
 
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { type Locale } from 'date-fns';
 import * as d from 'date-fns';
+import { t } from 'i18next';
 
-import { type useSpreadsheet } from 'loot-core/src/client/SpreadsheetProvider';
-import { send } from 'loot-core/src/platform/client/fetch';
-import * as monthUtils from 'loot-core/src/shared/months';
-import { q } from 'loot-core/src/shared/query';
-import { integerToCurrency, integerToAmount } from 'loot-core/src/shared/util';
+import { send } from 'loot-core/platform/client/fetch';
+import * as monthUtils from 'loot-core/shared/months';
+import { q } from 'loot-core/shared/query';
+import { integerToCurrency, integerToAmount } from 'loot-core/shared/util';
 import { type RuleConditionEntity } from 'loot-core/types/models';
 
-import { AlignedText } from '../../common/AlignedText';
-import { runAll, indexCashFlow } from '../util';
+import { runAll, indexCashFlow } from '@desktop-client/components/reports/util';
+import { type useSpreadsheet } from '@desktop-client/hooks/useSpreadsheet';
 
-export function simpleCashFlow(start, end) {
-  return async (spreadsheet, setData) => {
+export function simpleCashFlow(
+  startMonth: string,
+  endMonth: string,
+  conditions: RuleConditionEntity[] = [],
+  conditionsOp: 'and' | 'or' = 'and',
+) {
+  const start = monthUtils.firstDayOfMonth(startMonth);
+  const end = monthUtils.lastDayOfMonth(endMonth);
+
+  return async (
+    spreadsheet: ReturnType<typeof useSpreadsheet>,
+    setData: (data: { graphData: { income: number; expense: number } }) => void,
+  ) => {
+    const { filters } = await send('make-filters-from-conditions', {
+      conditions: conditions.filter(cond => !cond.customName),
+    });
+    const conditionsOpKey = conditionsOp === 'or' ? '$or' : '$and';
+
     function makeQuery() {
       return q('transactions')
         .filter({
-          $and: [{ date: { $gte: start } }, { date: { $lte: end } }],
+          [conditionsOpKey]: filters,
+        })
+        .filter({
+          $and: [
+            { date: { $gte: start } },
+            {
+              date: {
+                $lte:
+                  end > monthUtils.currentDay() ? monthUtils.currentDay() : end,
+              },
+            },
+          ],
           'account.offbudget': false,
           'payee.transfer_acct': null,
         })
@@ -43,12 +71,18 @@ export function simpleCashFlow(start, end) {
 }
 
 export function cashFlowByDate(
-  start: string,
-  end: string,
+  startMonth: string,
+  endMonth: string,
   isConcise: boolean,
   conditions: RuleConditionEntity[] = [],
   conditionsOp: 'and' | 'or',
+  locale: Locale,
 ) {
+  const start = monthUtils.firstDayOfMonth(startMonth);
+  const end = monthUtils.lastDayOfMonth(endMonth);
+  const fixedEnd =
+    end > monthUtils.currentDay() ? monthUtils.currentDay() : end;
+
   return async (
     spreadsheet: ReturnType<typeof useSpreadsheet>,
     setData: (data: ReturnType<typeof recalculate>) => void,
@@ -66,7 +100,7 @@ export function cashFlowByDate(
         .filter({
           $and: [
             { date: { $transform: '$month', $gte: start } },
-            { date: { $transform: '$month', $lte: end } },
+            { date: { $transform: '$month', $lte: fixedEnd } },
           ],
           'account.offbudget': false,
         });
@@ -103,19 +137,29 @@ export function cashFlowByDate(
         makeQuery().filter({ amount: { $lt: 0 } }),
       ],
       data => {
-        setData(recalculate(data, start, end, isConcise));
+        setData(recalculate(data, start, fixedEnd, isConcise, locale));
       },
     );
   };
 }
 
-function recalculate(data, start, end, isConcise) {
+function recalculate(
+  data: [
+    number,
+    Array<{ date: string; isTransfer: string | null; amount: number }>,
+    Array<{ date: string; isTransfer: string | null; amount: number }>,
+  ],
+  start: string,
+  end: string,
+  isConcise: boolean,
+  locale: Locale,
+) {
   const [startingBalance, income, expense] = data;
-  const convIncome = income.map(t => {
-    return { ...t, isTransfer: t.isTransfer !== null };
+  const convIncome = income.map(trans => {
+    return { ...trans, isTransfer: trans.isTransfer !== null };
   });
-  const convExpense = expense.map(t => {
-    return { ...t, isTransfer: t.isTransfer !== null };
+  const convExpense = expense.map(trans => {
+    return { ...trans, isTransfer: trans.isTransfer !== null };
   });
   const dates = isConcise
     ? monthUtils.rangeInclusive(
@@ -123,15 +167,25 @@ function recalculate(data, start, end, isConcise) {
         monthUtils.getMonth(end),
       )
     : monthUtils.dayRangeInclusive(start, end);
-  const incomes = indexCashFlow(convIncome, 'date', 'isTransfer');
-  const expenses = indexCashFlow(convExpense, 'date', 'isTransfer');
+  const incomes = indexCashFlow(convIncome);
+  const expenses = indexCashFlow(convExpense);
 
   let balance = startingBalance;
   let totalExpenses = 0;
   let totalIncome = 0;
   let totalTransfers = 0;
 
-  const graphData = dates.reduce(
+  const graphData = dates.reduce<{
+    expenses: Array<{ x: Date; y: number }>;
+    income: Array<{ x: Date; y: number }>;
+    transfers: Array<{ x: Date; y: number }>;
+    balances: Array<{
+      x: Date;
+      y: number;
+      premadeLabel: JSX.Element;
+      amount: number;
+    }>;
+  }>(
     (res, date) => {
       let income = 0;
       let expense = 0;
@@ -157,23 +211,34 @@ function recalculate(data, start, end, isConcise) {
         <div>
           <div style={{ marginBottom: 10 }}>
             <strong>
-              {d.format(x, isConcise ? 'MMMM yyyy' : 'MMMM d, yyyy')}
+              {d.format(x, isConcise ? 'MMMM yyyy' : 'MMMM d, yyyy', {
+                locale,
+              })}
             </strong>
           </div>
           <div style={{ lineHeight: 1.5 }}>
-            <AlignedText left="Income:" right={integerToCurrency(income)} />
-            <AlignedText left="Expenses:" right={integerToCurrency(expense)} />
             <AlignedText
-              left="Change:"
+              left={t('Income:')}
+              right={integerToCurrency(income)}
+            />
+            <AlignedText
+              left={t('Expenses:')}
+              right={integerToCurrency(expense)}
+            />
+            <AlignedText
+              left={t('Change:')}
               right={<strong>{integerToCurrency(income + expense)}</strong>}
             />
             {creditTransfers + debitTransfers !== 0 && (
               <AlignedText
-                left="Transfers:"
+                left={t('Transfers:')}
                 right={integerToCurrency(creditTransfers + debitTransfers)}
               />
             )}
-            <AlignedText left="Balance:" right={integerToCurrency(balance)} />
+            <AlignedText
+              left={t('Balance:')}
+              right={integerToCurrency(balance)}
+            />
           </div>
         </div>
       );

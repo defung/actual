@@ -1,10 +1,10 @@
-import { type RuleConditionEntity } from 'loot-core/src/types/models';
+import { type RuleConditionEntity } from 'loot-core/types/models';
 
 export function subfieldFromFilter({
   field,
   options,
   value,
-}: RuleConditionEntity) {
+}: Pick<RuleConditionEntity, 'field' | 'options' | 'value'>) {
   if (field === 'date') {
     if (typeof value === 'string') {
       if (value.length === 7) {

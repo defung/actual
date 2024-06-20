@@ -1,10 +1,10 @@
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode, type CSSProperties } from 'react';
 
-import { useResponsive } from '../ResponsiveProvider';
-import { theme, styles, type CSSProperties } from '../style';
-
-import { Text } from './common/Text';
-import { View } from './common/View';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 const HEADER_HEIGHT = 50;
 
@@ -54,11 +54,16 @@ export function MobilePageHeader({
     <View
       style={{
         alignItems: 'center',
-        backgroundColor: theme.mobileHeaderBackground,
-        color: theme.mobileHeaderText,
         flexDirection: 'row',
         flexShrink: 0,
         height: HEADER_HEIGHT,
+        backgroundColor: theme.mobileHeaderBackground,
+        '& *': {
+          color: theme.mobileHeaderText,
+        },
+        '& button[data-pressed]': {
+          backgroundColor: theme.mobileHeaderTextHover,
+        },
         ...style,
       }}
     >
@@ -135,6 +140,7 @@ export function Page({ header, style, padding, children, footer }: PageProps) {
     >
       {headerToRender}
       <View
+        role="main"
         style={{
           flex: 1,
           overflowY: isNarrowWidth ? 'auto' : undefined,

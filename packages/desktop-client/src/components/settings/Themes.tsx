@@ -1,35 +1,101 @@
-import React from 'react';
+import React, { type ReactNode } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 
-import { type Theme } from 'loot-core/types/prefs';
+import { Select } from '@actual-app/components/select';
+import { Text } from '@actual-app/components/text';
+import { theme as themeStyle } from '@actual-app/components/theme';
+import { tokens } from '@actual-app/components/tokens';
+import { View } from '@actual-app/components/view';
+import { css } from '@emotion/css';
 
-import { themeOptions, useTheme } from '../../style';
-import { Button } from '../common/Button';
-import { Select } from '../common/Select';
-import { Text } from '../common/Text';
+import { type DarkTheme, type Theme } from 'loot-core/types/prefs';
 
 import { Setting } from './UI';
 
+import { useSidebar } from '@desktop-client/components/sidebar/SidebarProvider';
+import {
+  themeOptions,
+  useTheme,
+  usePreferredDarkTheme,
+  darkThemeOptions,
+} from '@desktop-client/style';
+
+function Column({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View
+      style={{
+        alignItems: 'flex-start',
+        flexGrow: 1,
+        gap: '0.5em',
+        width: '100%',
+      }}
+    >
+      <Text style={{ fontWeight: 500 }}>{title}</Text>
+      <View style={{ alignItems: 'flex-start', gap: '1em' }}>{children}</View>
+    </View>
+  );
+}
+
 export function ThemeSettings() {
+  const { t } = useTranslation();
+  const sidebar = useSidebar();
   const [theme, switchTheme] = useTheme();
+  const [darkTheme, switchDarkTheme] = usePreferredDarkTheme();
 
   return (
     <Setting
       primaryAction={
-        <Button bounce={false} style={{ padding: 0 }}>
-          <Select<Theme>
-            bare
-            onChange={value => {
-              switchTheme(value);
-            }}
-            value={theme}
-            options={themeOptions}
-            style={{ padding: '2px 10px', fontSize: 15 }}
-          />
-        </Button>
+        <View
+          style={{
+            flexDirection: 'column',
+            gap: '1em',
+            width: '100%',
+            [`@media (min-width: ${
+              sidebar.floating
+                ? tokens.breakpoint_small
+                : tokens.breakpoint_medium
+            })`]: {
+              flexDirection: 'row',
+            },
+          }}
+        >
+          <Column title={t('Theme')}>
+            <Select<Theme>
+              onChange={value => {
+                switchTheme(value);
+              }}
+              value={theme}
+              options={themeOptions}
+              className={css({
+                '&[data-hovered]': {
+                  backgroundColor: themeStyle.buttonNormalBackgroundHover,
+                },
+              })}
+            />
+          </Column>
+          {theme === 'auto' && (
+            <Column title={t('Dark theme')}>
+              <Select<DarkTheme>
+                onChange={value => {
+                  switchDarkTheme(value);
+                }}
+                value={darkTheme}
+                options={darkThemeOptions}
+                className={css({
+                  '&[data-hovered]': {
+                    backgroundColor: themeStyle.buttonNormalBackgroundHover,
+                  },
+                })}
+              />
+            </Column>
+          )}
+        </View>
       }
     >
       <Text>
-        <strong>Themes</strong> change the user interface colors.
+        <Trans>
+          <strong>Themes</strong> change the user interface colors.
+        </Trans>
       </Text>
     </Setting>
   );

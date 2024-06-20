@@ -38,7 +38,7 @@ function parsePrimary(state) {
   }
 
   let numberStr = '';
-  while (char(state) && char(state).match(/[0-9,. ]|\p{Sc}/u)) {
+  while (char(state) && char(state).match(/[0-9,.’\xa0 ]|\p{Sc}/u)) {
     numberStr += next(state);
   }
 
@@ -111,8 +111,8 @@ function evaluate(ast): number {
 
 export function evalArithmetic(
   expression: string,
-  defaultValue: number = null,
-) {
+  defaultValue: number | null = null,
+): number {
   // An empty expression always evals to the default
   if (expression === '') {
     return defaultValue;

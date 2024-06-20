@@ -1,33 +1,39 @@
 import React, { useMemo } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useTranslation } from 'react-i18next';
 
-import * as monthUtils from 'loot-core/src/shared/months';
-import { type AccountEntity } from 'loot-core/types/models/account';
-import { type CategoryEntity } from 'loot-core/types/models/category';
-import { type CategoryGroupEntity } from 'loot-core/types/models/category-group';
-import { type PayeeEntity } from 'loot-core/types/models/payee';
-import { type CustomReportEntity } from 'loot-core/types/models/reports';
-import { type LocalPrefs } from 'loot-core/types/prefs';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
 
-import { styles } from '../../../style/styles';
-import { theme } from '../../../style/theme';
-import { Text } from '../../common/Text';
-import { ChooseGraph } from '../ChooseGraph';
-import { getLiveRange } from '../getLiveRange';
-import { LoadingIndicator } from '../LoadingIndicator';
-import { ReportOptions } from '../ReportOptions';
-import { createCustomSpreadsheet } from '../spreadsheets/custom-spreadsheet';
-import { createGroupedSpreadsheet } from '../spreadsheets/grouped-spreadsheet';
-import { useReport } from '../useReport';
+import * as monthUtils from 'loot-core/shared/months';
+import {
+  type AccountEntity,
+  type CategoryEntity,
+  type CategoryGroupEntity,
+  type PayeeEntity,
+  type CustomReportEntity,
+} from 'loot-core/types/models';
+import { type SyncedPrefs } from 'loot-core/types/prefs';
+
+import { ChooseGraph } from '@desktop-client/components/reports/ChooseGraph';
+import { getLiveRange } from '@desktop-client/components/reports/getLiveRange';
+import { LoadingIndicator } from '@desktop-client/components/reports/LoadingIndicator';
+import { ReportOptions } from '@desktop-client/components/reports/ReportOptions';
+import { createCustomSpreadsheet } from '@desktop-client/components/reports/spreadsheets/custom-spreadsheet';
+import { createGroupedSpreadsheet } from '@desktop-client/components/reports/spreadsheets/grouped-spreadsheet';
+import { useReport } from '@desktop-client/components/reports/useReport';
 
 function ErrorFallback() {
+  const { t } = useTranslation();
   return (
     <>
       <div>
         <br />
       </div>
       <Text style={{ ...styles.mediumText, color: theme.errorText }}>
-        There was a problem loading your report
+        {t('There was a problem loading your report')}
       </Text>
     </>
   );
@@ -66,14 +72,18 @@ export function GetCardData({
   categories,
   earliestTransaction,
   firstDayOfWeekIdx,
+  showTooltip,
 }: {
   report: CustomReportEntity;
   payees: PayeeEntity[];
   accounts: AccountEntity[];
   categories: { list: CategoryEntity[]; grouped: CategoryGroupEntity[] };
   earliestTransaction: string;
-  firstDayOfWeekIdx?: LocalPrefs['firstDayOfWeekIdx'];
+  firstDayOfWeekIdx?: SyncedPrefs['firstDayOfWeekIdx'];
+  showTooltip?: boolean;
 }) {
+  const { isNarrowWidth } = useResponsive();
+
   let startDate = report.startDate;
   let endDate = report.endDate;
 
@@ -114,7 +124,6 @@ export function GetCardData({
       endDate,
       interval: report.interval,
       categories,
-      selectedCategories: report.selectedCategories ?? categories.list,
       conditions: report.conditions ?? [],
       conditionsOp: report.conditionsOp,
       showEmpty: report.showEmpty,
@@ -123,6 +132,7 @@ export function GetCardData({
       showUncategorized: report.showUncategorized,
       balanceTypeOp: ReportOptions.balanceTypeMap.get(report.balanceType),
       firstDayOfWeekIdx,
+      sortByOp: report.sortBy,
     });
   }, [report, categories, startDate, endDate, firstDayOfWeekIdx]);
   const getGraphData = useMemo(() => {
@@ -131,7 +141,6 @@ export function GetCardData({
       endDate,
       interval: report.interval,
       categories,
-      selectedCategories: report.selectedCategories ?? categories.list,
       conditions: report.conditions ?? [],
       conditionsOp: report.conditionsOp,
       showEmpty: report.showEmpty,
@@ -144,6 +153,7 @@ export function GetCardData({
       accounts,
       graphType: report.graphType,
       firstDayOfWeekIdx,
+      sortByOp: report.sortBy,
     });
   }, [
     report,
@@ -172,6 +182,7 @@ export function GetCardData({
         compact={true}
         style={{ height: 'auto', flex: 1 }}
         intervalsCount={intervals.length}
+        showTooltip={!isNarrowWidth && showTooltip}
       />
     </ErrorBoundary>
   ) : (

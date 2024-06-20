@@ -22,6 +22,12 @@ import { getServer } from './server-config';
 
 const UPLOAD_FREQUENCY_IN_DAYS = 7;
 
+export interface UsersWithAccess {
+  userId: string;
+  userName: string;
+  displayName: string;
+  owner: boolean;
+}
 export interface RemoteFile {
   deleted: boolean;
   fileId: string;
@@ -29,10 +35,24 @@ export interface RemoteFile {
   name: string;
   encryptKeyId: string;
   hasKey: boolean;
+  owner: string;
+  usersWithAccess: UsersWithAccess[];
 }
 
 async function checkHTTPStatus(res) {
   if (res.status !== 200) {
+    if (res.status === 403) {
+      try {
+        const text = await res.text();
+        const data = JSON.parse(text)?.data;
+        if (data?.reason === 'token-expired') {
+          await asyncStorage.removeItem('user-token');
+          throw new HTTPError(403, 'token-expired');
+        }
+      } catch (e) {
+        if (e instanceof HTTPError) throw e;
+      }
+    }
     return res.text().then(str => {
       throw new HTTPError(res.status, str);
     });
@@ -284,7 +304,9 @@ export async function upload() {
           ? { 'X-ACTUAL-ENCRYPT-META': JSON.stringify(uploadMeta) }
           : null),
         ...(groupId ? { 'X-ACTUAL-GROUP-ID': groupId } : null),
-      },
+        // TODO: fix me
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
       body: uploadContent,
     });
   } catch (err) {
@@ -346,7 +368,7 @@ export async function removeFile(fileId) {
   });
 }
 
-export async function listRemoteFiles(): Promise<RemoteFile[] | null> {
+export async function listRemoteFiles(): Promise<RemoteFile[]> {
   const userToken = await asyncStorage.getItem('user-token');
   if (!userToken) {
     return null;
@@ -369,20 +391,54 @@ export async function listRemoteFiles(): Promise<RemoteFile[] | null> {
     return null;
   }
 
-  return res.data.map(file => ({
-    ...file,
-    hasKey: encryption.hasKey(file.encryptKeyId),
-  }));
+  return res.data
+    .map(file => ({
+      ...file,
+      hasKey: encryption.hasKey(file.encryptKeyId),
+    }))
+    .filter(Boolean);
 }
 
-export async function download(fileId) {
+export async function getRemoteFile(
+  fileId: string,
+): Promise<RemoteFile | null> {
+  const userToken = await asyncStorage.getItem('user-token');
+  if (!userToken) {
+    return null;
+  }
+
+  let res;
+  try {
+    res = await fetchJSON(getServer().SYNC_SERVER + '/get-user-file-info', {
+      headers: {
+        'X-ACTUAL-TOKEN': userToken,
+        'X-ACTUAL-FILE-ID': fileId,
+      },
+    });
+  } catch (e) {
+    console.log('Unexpected error fetching file from server', e);
+    return null;
+  }
+
+  if (res.status === 'error') {
+    console.log('Error fetching file from server', res);
+    return null;
+  }
+
+  return {
+    ...res.data,
+    hasKey: encryption.hasKey(res.data.encryptKeyId),
+  };
+}
+
+export async function download(cloudFileId) {
   const userToken = await asyncStorage.getItem('user-token');
   const syncServer = getServer().SYNC_SERVER;
 
   const userFileFetch = fetch(`${syncServer}/download-user-file`, {
     headers: {
       'X-ACTUAL-TOKEN': userToken,
-      'X-ACTUAL-FILE-ID': fileId,
+      'X-ACTUAL-FILE-ID': cloudFileId,
     },
   })
     .then(checkHTTPStatus)
@@ -400,11 +456,11 @@ export async function download(fileId) {
   const userFileInfoFetch = fetchJSON(`${syncServer}/get-user-file-info`, {
     headers: {
       'X-ACTUAL-TOKEN': userToken,
-      'X-ACTUAL-FILE-ID': fileId,
+      'X-ACTUAL-FILE-ID': cloudFileId,
     },
   }).catch(err => {
     console.log('Error fetching file info', err);
-    throw FileDownloadError('internal', { fileId });
+    throw FileDownloadError('internal', { fileId: cloudFileId });
   });
 
   const [userFileInfoRes, userFileRes] = await Promise.all([
@@ -417,7 +473,7 @@ export async function download(fileId) {
       'Could not download file from the server. Are you sure you have the right file ID?',
       userFileInfoRes,
     );
-    throw FileDownloadError('internal', { fileId });
+    throw FileDownloadError('internal', { fileId: cloudFileId });
   }
 
   const fileData = userFileInfoRes.data;

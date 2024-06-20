@@ -7,32 +7,41 @@ import React, {
   type ComponentType,
   type ComponentPropsWithoutRef,
   type ReactElement,
+  type CSSProperties,
+  useCallback,
 } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
-import { css } from 'glamor';
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
+import { SvgSplit } from '@actual-app/components/icons/v0';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { TextOneLine } from '@actual-app/components/text-one-line';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { css, cx } from '@emotion/css';
 
-import { reportBudget, rolloverBudget } from 'loot-core/client/queries';
+import { getNormalisedString } from 'loot-core/shared/normalisation';
 import { integerToCurrency } from 'loot-core/shared/util';
 import {
   type CategoryEntity,
   type CategoryGroupEntity,
-} from 'loot-core/src/types/models';
-
-import { useCategories } from '../../hooks/useCategories';
-import { useLocalPref } from '../../hooks/useLocalPref';
-import { SvgSplit } from '../../icons/v0';
-import { useResponsive } from '../../ResponsiveProvider';
-import { type CSSProperties, theme, styles } from '../../style';
-import { makeAmountFullStyle } from '../budget/util';
-import { Text } from '../common/Text';
-import { TextOneLine } from '../common/TextOneLine';
-import { View } from '../common/View';
-import { useSheetValue } from '../spreadsheet/useSheetValue';
+} from 'loot-core/types/models';
 
 import { Autocomplete, defaultFilterSuggestion } from './Autocomplete';
 import { ItemHeader } from './ItemHeader';
 
-type CategoryAutocompleteItem = CategoryEntity & {
+import { useEnvelopeSheetValue } from '@desktop-client/components/budget/envelope/EnvelopeBudgetComponents';
+import { makeAmountFullStyle } from '@desktop-client/components/budget/util';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { useSheetValue } from '@desktop-client/hooks/useSheetValue';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
+import {
+  trackingBudget,
+  envelopeBudget,
+} from '@desktop-client/spreadsheet/bindings';
+
+type CategoryAutocompleteItem = Omit<CategoryEntity, 'group'> & {
   group?: CategoryGroupEntity;
 };
 
@@ -68,6 +77,7 @@ function CategoryList({
   showHiddenItems,
   showBalances,
 }: CategoryListProps) {
+  const { t } = useTranslation();
   let lastGroup: string | undefined | null = null;
 
   const filteredItems = useMemo(
@@ -82,7 +92,8 @@ function CategoryList({
     <View>
       <View
         style={{
-          overflow: 'auto',
+          overflowY: 'auto',
+          willChange: 'transform',
           padding: '5px 0',
           ...(!embedded && { maxHeight: 175 }),
         }}
@@ -97,9 +108,10 @@ function CategoryList({
             });
           }
 
-          const showGroup = item.cat_group !== lastGroup;
-          const groupName = `${item.group?.name}${item.group?.hidden ? ' (hidden)' : ''}`;
-          lastGroup = item.cat_group;
+          const groupId = item.group?.id;
+          const showGroup = groupId !== lastGroup;
+          const groupName = `${item.group?.name}${item.group?.hidden ? ' ' + t('(hidden)') : ''}`;
+          lastGroup = groupId;
           return (
             <Fragment key={item.id}>
               {showGroup && item.group?.name && (
@@ -133,6 +145,21 @@ function CategoryList({
       {footer}
     </View>
   );
+}
+
+function customSort(obj: CategoryAutocompleteItem, value: string): number {
+  const name = getNormalisedString(obj.name);
+  const groupName = obj.group ? getNormalisedString(obj.group.name) : '';
+  if (obj.id === 'split') {
+    return -2;
+  }
+  if (name.includes(value)) {
+    return -1;
+  }
+  if (groupName.includes(value)) {
+    return 0;
+  }
+  return 1;
 }
 
 type CategoryAutocompleteProps = ComponentProps<
@@ -172,15 +199,50 @@ export function CategoryAutocomplete({
         (list, group) =>
           list.concat(
             (group.categories || [])
-              .filter(category => category.cat_group === group.id)
+              .filter(category => category.group === group.id)
               .map(category => ({
                 ...category,
                 group,
               })),
           ),
-        showSplitOption ? [{ id: 'split', name: '' } as CategoryEntity] : [],
+        showSplitOption
+          ? [{ id: 'split', name: '' } as CategoryAutocompleteItem]
+          : [],
       ),
     [defaultCategoryGroups, categoryGroups, showSplitOption],
+  );
+
+  const filterSuggestions = useCallback(
+    (
+      suggestions: CategoryAutocompleteItem[],
+      value: string,
+    ): CategoryAutocompleteItem[] => {
+      return suggestions
+        .filter(suggestion => {
+          if (suggestion.id === 'split') {
+            return true;
+          }
+
+          if (suggestion.group) {
+            return (
+              getNormalisedString(suggestion.group.name).includes(
+                getNormalisedString(value),
+              ) ||
+              getNormalisedString(
+                suggestion.group.name + ' ' + suggestion.name,
+              ).includes(getNormalisedString(value))
+            );
+          }
+
+          return defaultFilterSuggestion(suggestion, value);
+        })
+        .sort(
+          (a, b) =>
+            customSort(a, getNormalisedString(value)) -
+            customSort(b, getNormalisedString(value)),
+        );
+    },
+    [],
   );
 
   return (
@@ -197,14 +259,7 @@ export function CategoryAutocomplete({
         }
         return 0;
       }}
-      filterSuggestions={(suggestions, value) => {
-        return suggestions.filter(suggestion => {
-          return (
-            suggestion.id === 'split' ||
-            defaultFilterSuggestion(suggestion, value)
-          );
-        });
-      }}
+      filterSuggestions={filterSuggestions}
       suggestions={categorySuggestions}
       renderItems={(items, getItemProps, highlightedIndex) => (
         <CategoryList
@@ -295,7 +350,7 @@ function SplitTransactionButton({
           <SvgSplit width={10} height={10} style={{ marginRight: 5 }} />
         )}
       </Text>
-      Split Transaction
+      <Trans>Split Transaction</Trans>
     </View>
   );
 }
@@ -324,6 +379,7 @@ function CategoryItem({
   showBalances,
   ...props
 }: CategoryItemProps) {
+  const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
   const narrowStyle = isNarrowWidth
     ? {
@@ -332,24 +388,28 @@ function CategoryItem({
         borderTop: `1px solid ${theme.pillBorder}`,
       }
     : {};
-  const [budgetType] = useLocalPref('budgetType');
+  const [budgetType = 'envelope'] = useSyncedPref('budgetType');
 
-  const balance = useSheetValue(
-    budgetType === 'rollover'
-      ? rolloverBudget.catBalance(item.id)
-      : reportBudget.catBalance(item.id),
-  );
+  const balanceBinding =
+    budgetType === 'envelope'
+      ? envelopeBudget.catBalance(item.id)
+      : trackingBudget.catBalance(item.id);
+  const balance = useSheetValue<
+    'envelope-budget' | 'tracking-budget',
+    typeof balanceBinding
+  >(balanceBinding);
 
-  const isToBeBudgetedItem = item.id === 'to-be-budgeted';
-  const toBudget = useSheetValue(rolloverBudget.toBudget);
+  const isToBudgetItem = item.id === 'to-budget';
+  const toBudget = useEnvelopeSheetValue(envelopeBudget.toBudget);
 
   return (
     <div
       style={style}
       // See comment above.
       role="button"
-      className={`${className} ${css([
-        {
+      className={cx(
+        className,
+        css({
           backgroundColor: highlighted
             ? theme.menuAutoCompleteBackgroundHover
             : 'transparent',
@@ -360,8 +420,8 @@ function CategoryItem({
           paddingLeft: 20,
           borderRadius: embedded ? 4 : 0,
           ...narrowStyle,
-        },
-      ])}`}
+        }),
+      )}
       data-testid={`${item.name}-category-item`}
       data-highlighted={highlighted || undefined}
       {...props}
@@ -369,20 +429,20 @@ function CategoryItem({
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         <TextOneLine>
           {item.name}
-          {item.hidden ? ' (hidden)' : null}
+          {item.hidden ? ' ' + t('(hidden)') : null}
         </TextOneLine>
         <TextOneLine
           style={{
             display: !showBalances ? 'none' : undefined,
             marginLeft: 5,
             flexShrink: 0,
-            ...makeAmountFullStyle(isToBeBudgetedItem ? toBudget : balance, {
+            ...makeAmountFullStyle((isToBudgetItem ? toBudget : balance) || 0, {
               positiveColor: theme.noticeTextMenu,
               negativeColor: theme.errorTextMenu,
             }),
           }}
         >
-          {isToBeBudgetedItem
+          {isToBudgetItem
             ? toBudget != null
               ? ` ${integerToCurrency(toBudget || 0)}`
               : null

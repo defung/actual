@@ -1,22 +1,25 @@
 // @ts-strict-ignore
 import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router';
 
-import { isNonProductionEnvironment } from 'loot-core/src/shared/environment';
+import { isNonProductionEnvironment } from 'loot-core/shared/environment';
 
-import { Modal } from '../common/Modal';
-import { ManageRules } from '../ManageRules';
-import { type CommonModalProps } from '../Modals';
+import {
+  Modal,
+  ModalCloseButton,
+  ModalHeader,
+} from '@desktop-client/components/common/Modal';
+import { ManageRules } from '@desktop-client/components/ManageRules';
+import { type Modal as ModalType } from '@desktop-client/modals/modalsSlice';
 
-type ManageRulesModalProps = {
-  modalProps: CommonModalProps;
-  payeeId?: string;
-};
+type ManageRulesModalProps = Extract<
+  ModalType,
+  { name: 'manage-rules' }
+>['options'];
 
-export function ManageRulesModal({
-  modalProps,
-  payeeId,
-}: ManageRulesModalProps) {
+export function ManageRulesModal({ payeeId }: ManageRulesModalProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const location = useLocation();
   if (isNonProductionEnvironment()) {
@@ -28,8 +31,16 @@ export function ManageRulesModal({
   }
 
   return (
-    <Modal title="Rules" loading={loading} {...modalProps}>
-      {() => <ManageRules isModal payeeId={payeeId} setLoading={setLoading} />}
+    <Modal name="manage-rules" isLoading={loading}>
+      {({ state: { close } }) => (
+        <>
+          <ModalHeader
+            title={t('Rules')}
+            rightContent={<ModalCloseButton onPress={close} />}
+          />
+          <ManageRules isModal payeeId={payeeId} setLoading={setLoading} />
+        </>
+      )}
     </Modal>
   );
 }

@@ -1,7 +1,10 @@
 // @ts-strict-ignore
-import React, { useState } from 'react';
+import React, { useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { css } from 'glamor';
+import { AlignedText } from '@actual-app/components/aligned-text';
+import { theme } from '@actual-app/components/theme';
+import { css } from '@emotion/css';
 import {
   BarChart,
   Bar,
@@ -16,24 +19,23 @@ import {
 import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
-} from 'loot-core/src/shared/util';
-import { type DataEntity } from 'loot-core/src/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
-
-import { useAccounts } from '../../../hooks/useAccounts';
-import { useCategories } from '../../../hooks/useCategories';
-import { useNavigate } from '../../../hooks/useNavigate';
-import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
-import { useResponsive } from '../../../ResponsiveProvider';
-import { theme } from '../../../style';
-import { type CSSProperties } from '../../../style';
-import { AlignedText } from '../../common/AlignedText';
-import { Container } from '../Container';
-import { getCustomTick } from '../getCustomTick';
-import { numberFormatterTooltip } from '../numberFormatter';
+} from 'loot-core/shared/util';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { renderCustomLabel } from './renderCustomLabel';
 import { showActivity } from './showActivity';
+
+import { Container } from '@desktop-client/components/reports/Container';
+import { getCustomTick } from '@desktop-client/components/reports/getCustomTick';
+import { numberFormatterTooltip } from '@desktop-client/components/reports/numberFormatter';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
+import { usePrivacyMode } from '@desktop-client/hooks/usePrivacyMode';
 
 type PayloadItem = {
   name: string;
@@ -60,11 +62,12 @@ const CustomTooltip = ({
   payload,
   label,
 }: CustomTooltipProps) => {
+  const { t } = useTranslation();
   if (active && payload && payload.length) {
     let sumTotals = 0;
     return (
       <div
-        className={`${css({
+        className={css({
           zIndex: 1000,
           pointerEvents: 'none',
           borderRadius: 2,
@@ -72,7 +75,7 @@ const CustomTooltip = ({
           backgroundColor: theme.menuBackground,
           color: theme.menuItemText,
           padding: 10,
-        })}`}
+        })}
       >
         <div>
           <div style={{ marginBottom: 10 }}>
@@ -102,7 +105,7 @@ const CustomTooltip = ({
               })}
             {payload.length > 5 && compact && '...'}
             <AlignedText
-              left="Total"
+              left={t('Total')}
               right={amountToCurrency(sumTotals)}
               style={{
                 fontWeight: 600,
@@ -144,9 +147,10 @@ type StackedBarGraphProps = {
   groupBy: string;
   compact?: boolean;
   viewLabels: boolean;
-  balanceTypeOp: 'totalAssets' | 'totalDebts' | 'totalTotals';
+  balanceTypeOp: balanceTypeOpType;
   showHiddenCategories?: boolean;
   showOffBudget?: boolean;
+  showTooltip?: boolean;
   interval?: string;
 };
 
@@ -160,13 +164,13 @@ export function StackedBarGraph({
   balanceTypeOp,
   showHiddenCategories,
   showOffBudget,
+  showTooltip = true,
   interval,
 }: StackedBarGraphProps) {
   const navigate = useNavigate();
   const categories = useCategories();
   const accounts = useAccounts();
   const privacyMode = usePrivacyMode();
-  const { isNarrowWidth } = useResponsive();
   const [pointer, setPointer] = useState('');
   const [tooltip, setTooltip] = useState('');
 
@@ -194,8 +198,9 @@ export function StackedBarGraph({
                 data={data.intervalData}
                 margin={{ top: 0, right: 0, left: leftMargin, bottom: 10 }}
                 style={{ cursor: pointer }}
+                stackOffset="sign" //stacked by sign
               >
-                {(!isNarrowWidth || !compact) && (
+                {showTooltip && (
                   <Tooltip
                     content={
                       <CustomTooltip compact={compact} tooltip={tooltip} />
@@ -210,26 +215,19 @@ export function StackedBarGraph({
                   tick={{ fill: theme.pageText }}
                   tickLine={{ stroke: theme.pageText }}
                 />
+                {!compact && <CartesianGrid strokeDasharray="3 3" />}
                 {!compact && (
-                  <>
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: theme.pageText }}
-                      tickLine={{ stroke: theme.pageText }}
-                    />
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <YAxis
-                      tickFormatter={value =>
-                        getCustomTick(
-                          amountToCurrencyNoDecimal(value),
-                          privacyMode,
-                        )
-                      }
-                      tick={{ fill: theme.pageText }}
-                      tickLine={{ stroke: theme.pageText }}
-                      tickSize={0}
-                    />
-                  </>
+                  <YAxis
+                    tickFormatter={value =>
+                      getCustomTick(
+                        amountToCurrencyNoDecimal(value),
+                        privacyMode,
+                      )
+                    }
+                    tick={{ fill: theme.pageText }}
+                    tickLine={{ stroke: theme.pageText }}
+                    tickSize={0}
+                  />
                 )}
                 {data.legend
                   .slice(0)
@@ -251,7 +249,7 @@ export function StackedBarGraph({
                         }
                       }}
                       onClick={e =>
-                        !isNarrowWidth &&
+                        ((compact && showTooltip) || !compact) &&
                         !['Group', 'Interval'].includes(groupBy) &&
                         showActivity({
                           navigate,

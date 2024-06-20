@@ -1,25 +1,29 @@
 // @ts-strict-ignore
-import React, { useState } from 'react';
+import React, { useState, type CSSProperties } from 'react';
 
+import { theme } from '@actual-app/components/theme';
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer } from 'recharts';
 
-import { amountToCurrency } from 'loot-core/src/shared/util';
-import { type DataEntity } from 'loot-core/src/types/models/reports';
-import { type RuleConditionEntity } from 'loot-core/types/models/rule';
-
-import { useAccounts } from '../../../hooks/useAccounts';
-import { useCategories } from '../../../hooks/useCategories';
-import { useNavigate } from '../../../hooks/useNavigate';
-import { useResponsive } from '../../../ResponsiveProvider';
-import { theme, type CSSProperties } from '../../../style';
-import { PrivacyFilter } from '../../PrivacyFilter';
-import { Container } from '../Container';
+import { amountToCurrency } from 'loot-core/shared/util';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+  type RuleConditionEntity,
+} from 'loot-core/types/models';
 
 import { adjustTextSize } from './adjustTextSize';
 import { renderCustomLabel } from './renderCustomLabel';
 import { showActivity } from './showActivity';
 
+import { PrivacyFilter } from '@desktop-client/components/PrivacyFilter';
+import { Container } from '@desktop-client/components/reports/Container';
+import { useAccounts } from '@desktop-client/hooks/useAccounts';
+import { useCategories } from '@desktop-client/hooks/useCategories';
+import { useNavigate } from '@desktop-client/hooks/useNavigate';
+
 const RADIAN = Math.PI / 180;
+
+const canDeviceHover = () => window.matchMedia('(hover: hover)').matches;
 
 const ActiveShapeMobile = props => {
   const {
@@ -36,16 +40,38 @@ const ActiveShapeMobile = props => {
   } = props;
   const yAxis = payload.name ?? payload.date;
 
+  const sin = Math.sin(-RADIAN * 240);
+  const my = cy + outerRadius * sin;
+  const ey = my - 5;
+
   return (
     <g>
-      <text x={cx} y={cy + 70} dy={-8} textAnchor="middle" fill={fill}>
+      <text
+        x={cx}
+        y={cy + outerRadius * Math.sin(-RADIAN * 270) + 15}
+        dy={0}
+        textAnchor="middle"
+        fill={fill}
+      >
         {`${yAxis}`}
       </text>
       <PrivacyFilter>
-        <text x={cx - 40} y={cy + 40} dy={0} textAnchor="end" fill={fill}>
+        <text
+          x={cx + outerRadius * Math.cos(-RADIAN * 240) - 30}
+          y={ey}
+          dy={0}
+          textAnchor="end"
+          fill={fill}
+        >
           {`${amountToCurrency(value)}`}
         </text>
-        <text x={cx + 45} y={cy + 40} dy={0} textAnchor="start" fill="#999">
+        <text
+          x={cx + outerRadius * Math.cos(-RADIAN * 330) + 10}
+          y={ey}
+          dy={0}
+          textAnchor="start"
+          fill="#999"
+        >
           {`${(percent * 100).toFixed(2)}%`}
         </text>
       </PrivacyFilter>
@@ -181,11 +207,11 @@ type DonutGraphProps = {
   data: DataEntity;
   filters: RuleConditionEntity[];
   groupBy: string;
-  balanceTypeOp: 'totalAssets' | 'totalDebts' | 'totalTotals';
-  compact?: boolean;
+  balanceTypeOp: balanceTypeOpType;
   viewLabels: boolean;
   showHiddenCategories?: boolean;
   showOffBudget?: boolean;
+  showTooltip?: boolean;
 };
 
 export function DonutGraph({
@@ -194,10 +220,10 @@ export function DonutGraph({
   filters,
   groupBy,
   balanceTypeOp,
-  compact,
   viewLabels,
   showHiddenCategories,
   showOffBudget,
+  showTooltip = true,
 }: DonutGraphProps) {
   const yAxis = groupBy === 'Interval' ? 'date' : 'name';
   const splitData = groupBy === 'Interval' ? 'intervalData' : 'data';
@@ -205,11 +231,10 @@ export function DonutGraph({
   const navigate = useNavigate();
   const categories = useCategories();
   const accounts = useAccounts();
-  const { isNarrowWidth } = useResponsive();
   const [pointer, setPointer] = useState('');
 
-  const getVal = obj => {
-    if (balanceTypeOp === 'totalDebts') {
+  const getVal = (obj: DataEntity) => {
+    if (['totalDebts', 'netDebts'].includes(balanceTypeOp)) {
       return -1 * obj[balanceTypeOp];
     } else {
       return obj[balanceTypeOp];
@@ -219,70 +244,87 @@ export function DonutGraph({
   const [activeIndex, setActiveIndex] = useState(0);
 
   return (
-    <Container
-      style={{
-        ...style,
-        ...(compact && { height: 'auto' }),
-      }}
-    >
-      {(width, height) =>
-        data[splitData] && (
-          <ResponsiveContainer>
-            <div>
-              {!compact && <div style={{ marginTop: '15px' }} />}
-              <PieChart
-                width={width}
-                height={height}
-                style={{ cursor: pointer }}
-              >
-                <Pie
-                  activeIndex={activeIndex}
-                  activeShape={compact ? ActiveShapeMobile : ActiveShape}
-                  dataKey={val => getVal(val)}
-                  nameKey={yAxis}
-                  isAnimationActive={false}
-                  data={data[splitData]}
-                  innerRadius={Math.min(width, height) * 0.2}
-                  fill="#8884d8"
-                  labelLine={false}
-                  label={e =>
-                    viewLabels && !compact ? customLabel(e) : <div />
-                  }
-                  onMouseLeave={() => setPointer('')}
-                  onMouseEnter={(_, index) => {
-                    setActiveIndex(index);
-                    if (!['Group', 'Interval'].includes(groupBy)) {
-                      setPointer('pointer');
-                    }
-                  }}
-                  onClick={item =>
-                    !isNarrowWidth &&
-                    !['Group', 'Interval'].includes(groupBy) &&
-                    showActivity({
-                      navigate,
-                      categories,
-                      accounts,
-                      balanceTypeOp,
-                      filters,
-                      showHiddenCategories,
-                      showOffBudget,
-                      type: 'totals',
-                      startDate: data.startDate,
-                      endDate: data.endDate,
-                      field: groupBy.toLowerCase(),
-                      id: item.id,
-                    })
-                  }
+    <Container style={style}>
+      {(width, height) => {
+        const compact = height <= 300 || width <= 300;
+
+        return (
+          data[splitData] && (
+            <ResponsiveContainer>
+              <div>
+                {!compact && <div style={{ marginTop: '15px' }} />}
+                <PieChart
+                  width={width}
+                  height={height}
+                  style={{ cursor: pointer }}
                 >
-                  {data.legend.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </div>
-          </ResponsiveContainer>
-        )
-      }
+                  <Pie
+                    activeIndex={activeIndex}
+                    activeShape={
+                      width < 220 || height < 130
+                        ? undefined
+                        : compact
+                          ? ActiveShapeMobile
+                          : ActiveShape
+                    }
+                    dataKey={val => getVal(val)}
+                    nameKey={yAxis}
+                    isAnimationActive={false}
+                    data={data[splitData]}
+                    innerRadius={Math.min(width, height) * 0.2}
+                    fill="#8884d8"
+                    labelLine={false}
+                    label={e =>
+                      viewLabels && !compact ? customLabel(e) : <div />
+                    }
+                    startAngle={90}
+                    endAngle={-270}
+                    onMouseLeave={() => setPointer('')}
+                    onMouseEnter={(_, index) => {
+                      if (canDeviceHover()) {
+                        setActiveIndex(index);
+                        if (!['Group', 'Interval'].includes(groupBy)) {
+                          setPointer('pointer');
+                        }
+                      }
+                    }}
+                    onClick={(item, index) => {
+                      if (!canDeviceHover()) {
+                        setActiveIndex(index);
+                      }
+
+                      if (
+                        !['Group', 'Interval'].includes(groupBy) &&
+                        (canDeviceHover() || activeIndex === index) &&
+                        ((compact && showTooltip) || !compact)
+                      ) {
+                        showActivity({
+                          navigate,
+                          categories,
+                          accounts,
+                          balanceTypeOp,
+                          filters,
+                          showHiddenCategories,
+                          showOffBudget,
+                          type: 'totals',
+                          startDate: data.startDate,
+                          endDate: data.endDate,
+                          field: groupBy.toLowerCase(),
+                          id: item.id,
+                        });
+                      }
+                    }}
+                  >
+                    {data.legend.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </div>
+            </ResponsiveContainer>
+          )
+        );
+      }}
     </Container>
   );
 }

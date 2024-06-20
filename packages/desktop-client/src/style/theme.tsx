@@ -1,15 +1,14 @@
-// @ts-strict-ignore
 import { useEffect, useState } from 'react';
 
-import { isNonProductionEnvironment } from 'loot-core/src/shared/environment';
-import type { Theme } from 'loot-core/src/types/prefs';
-
-import { useGlobalPref } from '../hooks/useGlobalPref';
+import { isNonProductionEnvironment } from 'loot-core/shared/environment';
+import type { DarkTheme, Theme } from 'loot-core/types/prefs';
 
 import * as darkTheme from './themes/dark';
 import * as developmentTheme from './themes/development';
 import * as lightTheme from './themes/light';
 import * as midnightTheme from './themes/midnight';
+
+import { useGlobalPref } from '@desktop-client/hooks/useGlobalPref';
 
 const themes = {
   light: { name: 'Light', colors: lightTheme },
@@ -25,13 +24,25 @@ export const themeOptions = Object.entries(themes).map(
   ([key, { name }]) => [key, name] as [Theme, string],
 );
 
+export const darkThemeOptions = Object.entries({
+  dark: themes.dark,
+  midnight: themes.midnight,
+}).map(([key, { name }]) => [key, name] as [DarkTheme, string]);
+
 export function useTheme() {
-  const [theme = 'light', setThemePref] = useGlobalPref('theme');
+  const [theme = 'auto', setThemePref] = useGlobalPref('theme');
   return [theme, setThemePref] as const;
 }
 
+export function usePreferredDarkTheme() {
+  const [darkTheme = 'dark', setDarkTheme] =
+    useGlobalPref('preferredDarkTheme');
+  return [darkTheme, setDarkTheme] as const;
+}
+
 export function ThemeStyle() {
-  const [theme] = useTheme();
+  const [activeTheme] = useTheme();
+  const [darkThemePreference] = usePreferredDarkTheme();
   const [themeColors, setThemeColors] = useState<
     | typeof lightTheme
     | typeof darkTheme
@@ -41,10 +52,12 @@ export function ThemeStyle() {
   >(undefined);
 
   useEffect(() => {
-    if (theme === 'auto') {
+    if (activeTheme === 'auto') {
+      const darkTheme = themes[darkThemePreference];
+
       function darkThemeMediaQueryListener(event: MediaQueryListEvent) {
         if (event.matches) {
-          setThemeColors(themes['dark'].colors);
+          setThemeColors(darkTheme.colors);
         } else {
           setThemeColors(themes['light'].colors);
         }
@@ -59,7 +72,7 @@ export function ThemeStyle() {
       );
 
       if (darkThemeMediaQuery.matches) {
-        setThemeColors(themes['dark'].colors);
+        setThemeColors(darkTheme.colors);
       } else {
         setThemeColors(themes['light'].colors);
       }
@@ -71,18 +84,14 @@ export function ThemeStyle() {
         );
       };
     } else {
-      setThemeColors(themes[theme].colors);
+      setThemeColors(themes[activeTheme]?.colors);
     }
-  }, [theme]);
+  }, [activeTheme, darkThemePreference]);
 
   if (!themeColors) return null;
 
-  const css = Object.keys(themeColors)
-    .map(key => `  --color-${key}: ${themeColors[key]};`)
+  const css = Object.entries(themeColors)
+    .map(([key, value]) => `  --color-${key}: ${value};`)
     .join('\n');
   return <style>{`:root {\n${css}}`}</style>;
 }
-
-export const theme = Object.fromEntries(
-  Object.keys(lightTheme).map(key => [key, `var(--color-${key})`]),
-) as Record<keyof typeof lightTheme, string>;

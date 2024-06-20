@@ -1,36 +1,53 @@
-import React, { createRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Form } from 'react-aria-components';
+import { useTranslation } from 'react-i18next';
 
-import { theme } from '../../style/theme';
-import { Button } from '../common/Button';
-import { Stack } from '../common/Stack';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
-import { GenericInput } from '../util/GenericInput';
+import { Button } from '@actual-app/components/button';
+import { Stack } from '@actual-app/components/stack';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+
+import { GenericInput } from '@desktop-client/components/util/GenericInput';
 
 type SaveReportChooseProps = {
   onApply: (cond: string) => void;
 };
 
 export function SaveReportChoose({ onApply }: SaveReportChooseProps) {
-  const inputRef = createRef<HTMLInputElement>();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [err, setErr] = useState('');
   const [value, setValue] = useState('');
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
     }
-  });
+  }, []);
 
   return (
     <>
-      <form>
+      <Form
+        onSubmit={e => {
+          e.preventDefault();
+
+          if (!value) {
+            setErr('Invalid report entered');
+            return;
+          }
+
+          onApply(value);
+        }}
+      >
         <View style={{ flexDirection: 'row', align: 'center' }}>
-          <Text style={{ userSelect: 'none', flex: 1 }}>Choose Report</Text>
+          <Text style={{ userSelect: 'none', flex: 1 }}>
+            {t('Choose Report')}
+          </Text>
           <View style={{ flex: 1 }} />
         </View>
         <GenericInput
-          inputRef={inputRef}
+          ref={inputRef}
           field="report"
           subfield={null}
           type="saved"
@@ -47,22 +64,11 @@ export function SaveReportChoose({ onApply }: SaveReportChooseProps) {
           style={{ marginTop: 15 }}
         >
           <View style={{ flex: 1 }} />
-          <Button
-            type="primary"
-            onClick={e => {
-              e.preventDefault();
-              if (!value) {
-                setErr('Invalid report entered');
-                return;
-              }
-
-              onApply(value);
-            }}
-          >
-            Apply
+          <Button variant="primary" type="submit">
+            {t('Apply')}
           </Button>
         </Stack>
-      </form>
+      </Form>
       {err !== '' ? (
         <Stack direction="row" align="center" style={{ padding: 10 }}>
           <Text style={{ color: theme.errorText }}>{err}</Text>

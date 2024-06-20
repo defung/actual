@@ -16,22 +16,7 @@ function makeTransaction(data: Partial<TransactionEntity>): TransactionEntity {
     id: uuidv4(),
     amount: 2422,
     date: '2020-01-05',
-    account: {
-      id: 'acc-id-1',
-      name: 'account-1',
-      offbudget: 0,
-      closed: 0,
-      sort_order: 1,
-      tombstone: 0,
-      account_id: null,
-      bank: null,
-      mask: null,
-      official_name: null,
-      balance_current: null,
-      balance_available: null,
-      balance_limit: null,
-      account_sync_source: null,
-    },
+    account: 'acc-id-1',
     ...data,
   };
 }
@@ -218,6 +203,25 @@ describe('Transactions', () => {
         error: splitError(2000),
       }),
       expect.objectContaining({ amount: 500, parent_id: 't1' }),
+      expect.objectContaining({ amount: 3002 }),
+    ]);
+  });
+
+  test('deleting all child split transactions works', () => {
+    const transactions = [
+      makeTransaction({ amount: 2001 }),
+      ...makeSplitTransaction(
+        { id: 't1', amount: 2500, error: splitError(500) },
+        [{ id: 't2', amount: 2000 }],
+      ),
+      makeTransaction({ amount: 3002 }),
+    ];
+    const { data } = deleteTransaction(transactions, 't2');
+
+    expect(data).toEqual([
+      expect.objectContaining({ amount: 2001 }),
+      // Must delete error if no children
+      expect.objectContaining({ amount: 2500, error: null }),
       expect.objectContaining({ amount: 3002 }),
     ]);
   });

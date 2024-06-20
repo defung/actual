@@ -1,3 +1,4 @@
+import { Budget } from '../types/budget';
 import type {
   AccountEntity,
   CategoryEntity,
@@ -5,6 +6,7 @@ import type {
   PayeeEntity,
 } from '../types/models';
 
+import { RemoteFile } from './cloud-storage';
 import * as models from './models';
 
 export type APIAccountEntity = Pick<AccountEntity, 'id' | 'name'> & {
@@ -40,7 +42,7 @@ export type APICategoryEntity = Pick<
   CategoryEntity,
   'id' | 'name' | 'is_income' | 'hidden'
 > & {
-  group_id?: string;
+  group_id: string;
 };
 
 export const categoryModel = {
@@ -52,17 +54,16 @@ export const categoryModel = {
       name: category.name,
       is_income: category.is_income ? true : false,
       hidden: category.hidden ? true : false,
-      group_id: category.cat_group,
+      group_id: category.group,
     };
   },
 
   fromExternal(category: APICategoryEntity) {
-    const { group_id: _, ...result }: { group_id?: string } & CategoryEntity =
-      category;
-
-    if ('group_id' in category) {
-      result.cat_group = category.group_id;
-    }
+    const { group_id, ...apiCategory } = category;
+    const result: CategoryEntity = {
+      ...apiCategory,
+      group: group_id,
+    };
     return result;
   },
 };
@@ -112,5 +113,43 @@ export const payeeModel = {
   fromExternal(payee: APIPayeeEntity) {
     // No translation is needed
     return payee as PayeeEntity;
+  },
+};
+
+export type APIFileEntity = Omit<RemoteFile, 'deleted' | 'fileId'> & {
+  id?: string;
+  cloudFileId: string;
+  state?: 'remote';
+};
+
+export const remoteFileModel = {
+  toExternal(file: RemoteFile): APIFileEntity | null {
+    if (file.deleted) {
+      return null;
+    }
+    return {
+      cloudFileId: file.fileId,
+      state: 'remote',
+      groupId: file.groupId,
+      name: file.name,
+      encryptKeyId: file.encryptKeyId,
+      hasKey: file.hasKey,
+      owner: file.owner,
+      usersWithAccess: file.usersWithAccess,
+    };
+  },
+
+  fromExternal(file: APIFileEntity) {
+    return { deleted: false, fileId: file.cloudFileId, ...file } as RemoteFile;
+  },
+};
+
+export const budgetModel = {
+  toExternal(file: Budget): APIFileEntity {
+    return file as APIFileEntity;
+  },
+
+  fromExternal(file: APIFileEntity) {
+    return file as Budget;
   },
 };

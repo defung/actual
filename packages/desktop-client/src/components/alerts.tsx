@@ -1,11 +1,18 @@
 // @ts-strict-ignore
-import React, { type ComponentType, type ReactNode } from 'react';
+import React, {
+  type ComponentType,
+  type ReactNode,
+  type CSSProperties,
+} from 'react';
 
-import { SvgExclamationOutline, SvgInformationOutline } from '../icons/v1';
-import { styles, theme, type CSSProperties } from '../style';
-
-import { Text } from './common/Text';
-import { View } from './common/View';
+import {
+  SvgExclamationOutline,
+  SvgInformationOutline,
+} from '@actual-app/components/icons/v1';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 
 type AlertProps = {
   icon?: ComponentType<{ width?: number; style?: CSSProperties }>;
@@ -66,9 +73,9 @@ export const Information = ({ style, children }: ScopedAlertProps) => {
       color={theme.pageTextLight}
       backgroundColor="transparent"
       style={{
-        ...style,
         boxShadow: 'none',
         padding: 5,
+        ...style,
       }}
     >
       {children}

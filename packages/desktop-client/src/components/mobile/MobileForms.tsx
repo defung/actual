@@ -1,16 +1,18 @@
 import React, {
+  type ComponentPropsWithoutRef,
   type ComponentPropsWithRef,
   forwardRef,
   type ReactNode,
+  type CSSProperties,
 } from 'react';
 
-import { css } from 'glamor';
-
-import { theme, styles, type CSSProperties } from '../../style';
-import { Button } from '../common/Button';
-import { Input } from '../common/Input';
-import { Text } from '../common/Text';
-import { View } from '../common/View';
+import { Button } from '@actual-app/components/button';
+import { Input } from '@actual-app/components/input';
+import { styles } from '@actual-app/components/styles';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { Toggle } from '@actual-app/components/toggle';
+import { css } from '@emotion/css';
 
 type FieldLabelProps = {
   title: string;
@@ -50,7 +52,7 @@ export const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
   ({ disabled, style, onUpdate, ...props }, ref) => {
     return (
       <Input
-        inputRef={ref}
+        ref={ref}
         autoCorrect="false"
         autoCapitalize="none"
         disabled={disabled}
@@ -73,57 +75,59 @@ InputField.displayName = 'InputField';
 
 type TapFieldProps = ComponentPropsWithRef<typeof Button> & {
   rightContent?: ReactNode;
+  textStyle?: CSSProperties;
 };
 
+const defaultTapFieldStyle: ComponentPropsWithoutRef<
+  typeof Button
+>['style'] = ({ isDisabled, isPressed, isHovered }) => ({
+  ...valueStyle,
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: theme.tableBackground,
+  ...(isDisabled && {
+    backgroundColor: theme.formInputTextReadOnlySelection,
+  }),
+  ...(isPressed
+    ? {
+        opacity: 0.5,
+        boxShadow: 'none',
+      }
+    : {}),
+  ...(isHovered
+    ? {
+        boxShadow: 'none',
+      }
+    : {}),
+});
+
 export const TapField = forwardRef<HTMLButtonElement, TapFieldProps>(
-  (
-    {
-      value,
-      children,
-      disabled,
-      rightContent,
-      style,
-      textStyle,
-      onClick,
-      ...props
-    },
-    ref,
-  ) => {
+  ({ value, children, rightContent, style, textStyle, ...props }, ref) => {
     return (
       <Button
-        // @ts-expect-error fix this later
-        as={View}
         ref={ref}
-        onClick={!disabled ? onClick : undefined}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          ...style,
-          ...valueStyle,
-          backgroundColor: theme.tableBackground,
-          ...(disabled && {
-            backgroundColor: theme.formInputTextReadOnlySelection,
-          }),
-        }}
         bounce={false}
-        activeStyle={{
-          opacity: 0.5,
-          boxShadow: 'none',
-        }}
-        hoveredStyle={{
-          boxShadow: 'none',
-        }}
-        // activeOpacity={0.05}
+        style={renderProps => ({
+          ...defaultTapFieldStyle(renderProps),
+          ...(typeof style === 'function' ? style(renderProps) : style),
+        })}
         {...props}
       >
         {children ? (
           children
         ) : (
-          <Text style={{ flex: 1, userSelect: 'none', ...textStyle }}>
+          <Text
+            style={{
+              flex: 1,
+              userSelect: 'none',
+              textAlign: 'left',
+              ...textStyle,
+            }}
+          >
             {value}
           </Text>
         )}
-        {!disabled && rightContent}
+        {!props.isDisabled && rightContent}
       </Button>
     );
   },
@@ -131,55 +135,38 @@ export const TapField = forwardRef<HTMLButtonElement, TapFieldProps>(
 
 TapField.displayName = 'TapField';
 
-type BooleanFieldProps = {
-  checked: boolean;
-  disabled?: boolean;
-  onUpdate?: (checked: boolean) => void;
-  style?: CSSProperties;
-};
+type ToggleFieldProps = ComponentPropsWithoutRef<typeof Toggle>;
 
-export function BooleanField({
-  checked,
-  onUpdate,
+export function ToggleField({
+  id,
+  isOn,
+  onToggle,
   style,
-  disabled = false,
-}: BooleanFieldProps) {
+  className,
+  isDisabled = false,
+}: ToggleFieldProps) {
   return (
-    <input
-      disabled={disabled ? true : undefined}
-      type="checkbox"
-      checked={checked}
-      onChange={e => onUpdate?.(e.target.checked)}
-      className={`${css([
-        {
-          marginInline: styles.mobileEditingPadding,
-          flexShrink: 0,
-          appearance: 'none',
-          outline: 0,
-          border: '1px solid ' + theme.formInputBorder,
-          borderRadius: 4,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: theme.checkboxText,
-          backgroundColor: theme.tableBackground,
-          ':checked': {
-            border: '1px solid ' + theme.checkboxBorderSelected,
-            backgroundColor: theme.checkboxBackgroundSelected,
-            '::after': {
-              display: 'block',
-              background:
-                theme.checkboxBackgroundSelected +
-                // eslint-disable-next-line rulesdir/typography
-                ' url(\'data:image/svg+xml; utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path fill="white" d="M0 11l2-2 5 5L18 3l2 2L7 18z"/></svg>\') 15px 15px',
-              width: 15,
-              height: 15,
-              content: ' ',
+    <Toggle
+      id={id}
+      isOn={isOn}
+      isDisabled={isDisabled}
+      onToggle={onToggle}
+      style={style}
+      className={String(
+        css([
+          {
+            '& [data-toggle-container]': {
+              width: 50,
+              height: 24,
+            },
+            '& [data-toggle]': {
+              width: 20,
+              height: 20,
             },
           },
-        },
-        style,
-      ])}`}
+          className,
+        ]),
+      )}
     />
   );
 }

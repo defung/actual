@@ -1,12 +1,14 @@
 import React, { useState, type ReactNode } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router';
 
-import { css, media } from 'glamor';
+import { type CSSProperties } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+import { tokens } from '@actual-app/components/tokens';
+import { View } from '@actual-app/components/view';
+import { css } from '@emotion/css';
 
-import { type CSSProperties, theme } from '../../style';
-import { tokens } from '../../tokens';
-import { Link } from '../common/Link';
-import { View } from '../common/View';
+import { Link } from '@desktop-client/components/common/Link';
 
 type SettingProps = {
   primaryAction?: ReactNode;
@@ -17,7 +19,7 @@ type SettingProps = {
 export const Setting = ({ primaryAction, style, children }: SettingProps) => {
   return (
     <View
-      className={`${css([
+      className={css([
         {
           backgroundColor: theme.pillBackground,
           alignSelf: 'flex-start',
@@ -28,7 +30,7 @@ export const Setting = ({ primaryAction, style, children }: SettingProps) => {
           width: '100%',
         },
         style,
-      ])}`}
+      ])}
     >
       <View
         style={{
@@ -49,6 +51,7 @@ type AdvancedToggleProps = {
 };
 
 export const AdvancedToggle = ({ children }: AdvancedToggleProps) => {
+  const { t } = useTranslation();
   const location = useLocation();
   const [expanded, setExpanded] = useState(location.hash === '#advanced');
 
@@ -61,9 +64,11 @@ export const AdvancedToggle = ({ children }: AdvancedToggleProps) => {
         marginBottom: 25,
         width: '100%',
       }}
-      className={`${media(`(min-width: ${tokens.breakpoint_small})`, {
-        width: 'auto',
-      })}`}
+      className={css({
+        [`@media (min-width: ${tokens.breakpoint_small})`]: {
+          width: 'auto',
+        },
+      })}
       innerRef={el => {
         if (el && location.hash === '#advanced') {
           el.scrollIntoView(true);
@@ -71,7 +76,7 @@ export const AdvancedToggle = ({ children }: AdvancedToggleProps) => {
       }}
     >
       <View style={{ fontSize: 20, fontWeight: 500, flexShrink: 0 }}>
-        Advanced Settings
+        {t('Advanced Settings')}
       </View>
       {children}
     </View>
@@ -87,7 +92,7 @@ export const AdvancedToggle = ({ children }: AdvancedToggleProps) => {
         marginBottom: 25,
       }}
     >
-      Show advanced settings
+      {t('Show advanced settings')}
     </Link>
   );
 };

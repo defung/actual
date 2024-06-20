@@ -1,3 +1,6 @@
+import { getNormalisedString } from '../../shared/normalisation';
+import { QueryState } from '../../shared/query';
+
 // @ts-strict-ignore
 let _uid = 0;
 function resetUid() {
@@ -692,7 +695,7 @@ const compileOp = saveStack('op', (state, fieldRef, opData) => {
     }
     case '$ne': {
       if (castInput(state, rhs, lhs.type).type === 'null') {
-        return `${val(state, lhs)} IS NULL`;
+        return `${val(state, lhs)} IS NOT NULL`;
       }
 
       const [left, right] = valArray(state, [lhs, rhs], [null, lhs.type]);
@@ -704,12 +707,12 @@ const compileOp = saveStack('op', (state, fieldRef, opData) => {
         state.namedParameters = [].concat.apply([], orders);
 
         return `CASE
-          WHEN ${left} IS NULL THEN ${right} IS NULL
-          ELSE ${left} != ${right}
+          WHEN ${left} IS NULL THEN ${right} IS NOT NULL
+          ELSE ${left} IS NOT ${right}
         END`;
       }
 
-      return `${left} != ${right}`;
+      return `(${left} != ${right} OR ${left} IS NULL)`;
     }
     case '$oneof': {
       const [left, right] = valArray(state, [lhs, rhs], [null, 'array']);
@@ -720,11 +723,15 @@ const compileOp = saveStack('op', (state, fieldRef, opData) => {
     }
     case '$like': {
       const [left, right] = valArray(state, [lhs, rhs], ['string', 'string']);
-      return `${left} LIKE ${right}`;
+      return `UNICODE_LIKE(${getNormalisedString(right)}, NORMALISE(${left}))`;
+    }
+    case '$regexp': {
+      const [left, right] = valArray(state, [lhs, rhs], ['string', 'string']);
+      return `REGEXP(${right}, ${left})`;
     }
     case '$notlike': {
       const [left, right] = valArray(state, [lhs, rhs], ['string', 'string']);
-      return `(${left} NOT LIKE ${right}\n OR ${left} IS NULL)`;
+      return `(NOT UNICODE_LIKE(${getNormalisedString(right)}, NORMALISE(${left}))\n OR ${left} IS NULL)`;
     }
     default:
       throw new CompileError(`Unknown operator: ${op}`);
@@ -751,7 +758,7 @@ function compileConditions(state, conds) {
           }
           return compileAnd(state, cond);
         } else if (field === '$or') {
-          if (!cond) {
+          if (!cond || (Array.isArray(cond) && cond.length === 0)) {
             return null;
           }
           return compileOr(state, cond);
@@ -994,14 +1001,15 @@ export function isAggregateQuery(queryState) {
   });
 }
 
+// TODO: Type this based on schema/index
+type Schema = unknown;
+
 export type SchemaConfig = {
   tableViews?:
-    | Record<string, unknown>
-    | ((name: string, config: { withDead; isJoin; tableOptions }) => unknown);
+    | Record<string, string>
+    | ((name: string, config: { withDead; isJoin; tableOptions }) => string);
   tableFilters?: (name: string) => unknown[];
-  customizeQuery?: <T extends { table: string; orderExpressions: unknown[] }>(
-    queryString: T,
-  ) => T;
+  customizeQuery?: (queryState: QueryState) => QueryState;
   views?: Record<
     string,
     {
@@ -1010,9 +1018,46 @@ export type SchemaConfig = {
     }
   >;
 };
+
+// Types per field. Should be based on the schema.
+export type OutputTypes = Map<string, string | number | null>;
+
+type NamedParameter = {
+  type: string;
+  paramName: string;
+  paramType?: string;
+  value: string;
+};
+
+// TODO: Type this
+type CompileStack = unknown[];
+
+export type CompilerState = {
+  schema: Schema;
+  implicitTableName: string;
+  implicitTableId: string;
+  paths: Map<string, unknown>;
+  dependencies: string[];
+  compileStack: CompileStack;
+  outputTypes: OutputTypes;
+  validateRefs: boolean;
+  namedParameters: NamedParameter[];
+};
+
+export type SqlPieces = {
+  select: string;
+  from: string;
+  joins: string;
+  where: string;
+  groupBy: string;
+  orderBy: string;
+  limit: number | null;
+  offset: number | null;
+};
+
 export function compileQuery(
-  queryState,
-  schema,
+  queryState: QueryState,
+  schema: Schema,
   schemaConfig: SchemaConfig = {},
 ) {
   const { withDead, validateRefs = true, tableOptions, rawMode } = queryState;
@@ -1065,7 +1110,7 @@ export function compileQuery(
   let joins = '';
   let groupBy = '';
   let orderBy = '';
-  const state = {
+  const state: CompilerState = {
     schema,
     implicitTableName: tableName,
     implicitTableId: tableRef(tableName),
@@ -1123,7 +1168,7 @@ export function compileQuery(
     throw e;
   }
 
-  const sqlPieces = {
+  const sqlPieces: SqlPieces = {
     select,
     from: tableRef(tableName),
     joins,
@@ -1140,15 +1185,19 @@ export function compileQuery(
   };
 }
 
-export function defaultConstructQuery(queryState, state, sqlPieces) {
+export function defaultConstructQuery(
+  queryState: QueryState,
+  compilerState: CompilerState,
+  sqlPieces: SqlPieces,
+) {
   const s = sqlPieces;
 
   const where = queryState.withDead
     ? s.where
     : addTombstone(
-        state.schema,
-        state.implicitTableName,
-        state.implicitTableId,
+        compilerState.schema,
+        compilerState.implicitTableName,
+        compilerState.implicitTableId,
         s.where,
       );
 
@@ -1164,9 +1213,9 @@ export function defaultConstructQuery(queryState, state, sqlPieces) {
 }
 
 export function generateSQLWithState(
-  queryState,
-  schema?: unknown,
-  schemaConfig?: unknown,
+  queryState: QueryState,
+  schema?: Schema,
+  schemaConfig?: SchemaConfig,
 ) {
   const { sqlPieces, state } = compileQuery(queryState, schema, schemaConfig);
   return { sql: defaultConstructQuery(queryState, state, sqlPieces), state };

@@ -5,35 +5,37 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { captureBreadcrumb } from '../../platform/exceptions';
 import * as connection from '../../platform/server/connection';
-import { dayFromDate, currentDay, parseDate } from '../../shared/months';
+import { currentDay, dayFromDate, parseDate } from '../../shared/months';
 import { q } from '../../shared/query';
 import {
   extractScheduleConds,
-  recurConfigToRSchedule,
+  getDateWithSkippedWeekend,
   getHasTransactionsQuery,
-  getStatus,
+  getNextDate,
   getScheduledAmount,
+  getStatus,
+  recurConfigToRSchedule,
 } from '../../shared/schedules';
-import { Rule, Condition } from '../accounts/rules';
+import { ScheduleEntity } from '../../types/models';
 import { addTransactions } from '../accounts/sync';
-import {
-  insertRule,
-  updateRule,
-  getRules,
-  ruleModel,
-} from '../accounts/transaction-rules';
 import { createApp } from '../app';
-import { runQuery as aqlQuery } from '../aql';
+import { aqlQuery } from '../aql';
 import * as db from '../db';
 import { toDateRepr } from '../models';
 import { mutator, runMutator } from '../mutators';
 import * as prefs from '../prefs';
+import { Rule } from '../rules';
 import { addSyncListener, batchMessages } from '../sync';
+import {
+  getRules,
+  insertRule,
+  ruleModel,
+  updateRule,
+} from '../transactions/transaction-rules';
 import { undoable } from '../undo';
 import { Schedule as RSchedule } from '../util/rschedule';
 
 import { findSchedules } from './find-schedules';
-import { SchedulesHandlers } from './types/handlers';
 
 // Utilities
 
@@ -64,47 +66,6 @@ export function updateConditions(conditions, newConditions) {
     .map(x => x[1]);
 
   return updated.concat(added);
-}
-
-export function getNextDate(
-  dateCond,
-  start = new Date(currentDay()),
-  noSkipWeekend = false,
-) {
-  start = d.startOfDay(start);
-
-  const cond = new Condition(
-    dateCond.op,
-    'date',
-    dateCond.value,
-    null,
-    new Map(Object.entries({ date: 'date' })),
-  );
-  const value = cond.getValue();
-
-  if (value.type === 'date') {
-    return value.date;
-  } else if (value.type === 'recur') {
-    let dates = value.schedule.occurrences({ start, take: 1 }).toArray();
-
-    if (dates.length === 0) {
-      // Could be a schedule with limited occurrences, so we try to
-      // find the last occurrence
-      dates = value.schedule.occurrences({ reverse: true, take: 1 }).toArray();
-    }
-
-    if (dates.length > 0) {
-      let date = dates[0].date;
-      if (value.schedule.data.skipWeekend && !noSkipWeekend) {
-        date = getDateWithSkippedWeekend(
-          date,
-          value.schedule.data.weekendSolve,
-        );
-      }
-      return dayFromDate(date);
-    }
-  }
-  return null;
 }
 
 export async function getRuleForSchedule(id: string | null): Promise<Rule> {
@@ -179,7 +140,9 @@ export async function setNextDate({
     if (newNextDate !== nextDate) {
       // Our `update` functon requires the id of the item and we don't
       // have it, so we need to query it
-      const nd = await db.first(
+      const nd = await db.first<
+        Pick<db.DbScheduleNextDate, 'id' | 'base_next_date_ts'>
+      >(
         'SELECT id, base_next_date_ts FROM schedules_next_date WHERE schedule_id = ?',
         [id],
       );
@@ -205,7 +168,7 @@ export async function setNextDate({
 // Methods
 
 async function checkIfScheduleExists(name, scheduleId) {
-  const idForName = await db.first(
+  const idForName = await db.first<Pick<db.DbSchedule, 'id'>>(
     'SELECT id from schedules WHERE tombstone = 0 AND name = ?',
     [name],
   );
@@ -222,7 +185,7 @@ async function checkIfScheduleExists(name, scheduleId) {
 export async function createSchedule({
   schedule = null,
   conditions = [],
-} = {}) {
+} = {}): Promise<ScheduleEntity['id']> {
   const scheduleId = schedule?.id || uuidv4();
 
   const { date: dateCond } = extractScheduleConds(conditions);
@@ -345,6 +308,8 @@ export async function updateSchedule({
 
     await db.updateWithSchema('schedules', schedule);
   });
+
+  return schedule.id;
 }
 
 export async function deleteSchedule({ id }) {
@@ -366,6 +331,7 @@ async function skipNextDate({ id }) {
     },
   });
 }
+
 function discoverSchedules() {
   return findSchedules();
 }
@@ -457,7 +423,7 @@ async function postTransactionForSchedule({ id }: { id: string }) {
     payee: schedule._payee,
     account: schedule._account,
     amount: getScheduledAmount(schedule._amount),
-    date: schedule.next_date,
+    date: currentDay(),
     schedule: schedule.id,
     cleared: false,
   };
@@ -486,11 +452,18 @@ async function advanceSchedulesService(syncSuccess) {
   const failedToPost = [];
   let didPost = false;
 
+  const { data: upcomingLength } = await aqlQuery(
+    q('preferences')
+      .filter({ id: 'upcomingScheduledTransactionLength' })
+      .select('value'),
+  );
+
   for (const schedule of schedules) {
     const status = getStatus(
       schedule.next_date,
       schedule.completed,
       hasTrans.has(schedule.id),
+      upcomingLength[0]?.value ?? '7',
     );
 
     if (status === 'paid') {
@@ -529,7 +502,7 @@ async function advanceSchedulesService(syncSuccess) {
   }
 
   if (failedToPost.length > 0) {
-    connection.send('schedules-offline', { payees: failedToPost });
+    connection.send('schedules-offline');
   } else if (didPost) {
     // This forces a full refresh of transactions because it
     // simulates them coming in from a full sync. This not a
@@ -538,10 +511,21 @@ async function advanceSchedulesService(syncSuccess) {
     connection.send('sync-event', {
       type: 'success',
       tables: ['transactions'],
-      syncDisabled: 'false',
+      syncDisabled: false,
     });
   }
 }
+
+export type SchedulesHandlers = {
+  'schedule/create': typeof createSchedule;
+  'schedule/update': typeof updateSchedule;
+  'schedule/delete': typeof deleteSchedule;
+  'schedule/skip-next-date': typeof skipNextDate;
+  'schedule/post-transaction': typeof postTransactionForSchedule;
+  'schedule/force-run-service': typeof advanceSchedulesService;
+  'schedule/discover': typeof discoverSchedules;
+  'schedule/get-upcoming-dates': typeof getUpcomingDates;
+};
 
 // Expose functions to the client
 export const app = createApp<SchedulesHandlers>();
@@ -577,19 +561,3 @@ app.events.on('sync', ({ type }) => {
     }
   }
 });
-
-export function getDateWithSkippedWeekend(
-  date: Date,
-  solveMode: 'after' | 'before',
-) {
-  if (d.isWeekend(date)) {
-    if (solveMode === 'after') {
-      return d.nextMonday(date);
-    } else if (solveMode === 'before') {
-      return d.previousFriday(date);
-    } else {
-      throw new Error('Unknown weekend solve mode, this should not happen!');
-    }
-  }
-  return date;
-}

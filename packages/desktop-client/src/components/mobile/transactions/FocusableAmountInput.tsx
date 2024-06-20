@@ -6,21 +6,24 @@ import React, {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react';
+
+import { Button } from '@actual-app/components/button';
+import { Text } from '@actual-app/components/text';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { css } from '@emotion/css';
 
 import {
   amountToCurrency,
   appendDecimals,
   currencyToAmount,
-} from 'loot-core/src/shared/util';
+} from 'loot-core/shared/util';
 
-import { useLocalPref } from '../../../hooks/useLocalPref';
-import { useMergedRefs } from '../../../hooks/useMergedRefs';
-import { type CSSProperties, theme } from '../../../style';
-import { makeAmountFullStyle } from '../../budget/util';
-import { Button } from '../../common/Button';
-import { Text } from '../../common/Text';
-import { View } from '../../common/View';
+import { makeAmountFullStyle } from '@desktop-client/components/budget/util';
+import { useMergedRefs } from '@desktop-client/hooks/useMergedRefs';
+import { useSyncedPref } from '@desktop-client/hooks/useSyncedPref';
 
 type AmountInputProps = {
   value: number;
@@ -45,8 +48,8 @@ const AmountInput = memo(function AmountInput({
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
   const [value, setValue] = useState(0);
-  const inputRef = useRef<HTMLInputElement>();
-  const [hideFraction = false] = useLocalPref('hideFraction');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [hideFraction] = useSyncedPref('hideFraction');
 
   const mergedInputRef = useMergedRefs<HTMLInputElement>(
     props.inputRef,
@@ -94,9 +97,12 @@ const AmountInput = memo(function AmountInput({
   };
 
   const onUpdate = (value: string) => {
-    props.onUpdate?.(value);
+    const originalAmount = Math.abs(props.value);
     const amount = applyText();
-    props.onUpdateAmount?.(amount);
+    if (amount !== originalAmount) {
+      props.onUpdate?.(value);
+      props.onUpdateAmount?.(amount);
+    }
   };
 
   const onBlur: HTMLProps<HTMLInputElement>['onBlur'] = e => {
@@ -107,7 +113,7 @@ const AmountInput = memo(function AmountInput({
   };
 
   const onChangeText = (text: string) => {
-    text = appendDecimals(text, hideFraction);
+    text = appendDecimals(text, String(hideFraction) === 'true');
     setEditing(true);
     setText(text);
     props.onChangeValue?.(text);
@@ -148,7 +154,7 @@ const AmountInput = memo(function AmountInput({
           pointerEvents: 'none',
           ...textStyle,
         }}
-        data-testid="amount-fake-input"
+        data-testid="amount-input-text"
       >
         {editing ? text : amountToCurrency(value)}
       </Text>
@@ -240,24 +246,24 @@ export const FocusableAmountInput = memo(function FocusableAmountInput({
               right: 'calc(100% + 5px)',
               top: '8px',
             }}
-            onClick={toggleIsNegative}
+            onPress={toggleIsNegative}
           >
             {isNegative ? '-' : '+'}
           </Button>
         )}
         <Button
-          onClick={onFocus}
+          onPress={onFocus}
           // Defines how far touch can start away from the button
           // hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
           {...buttonProps}
-          style={{
+          className={css({
             ...(buttonProps && buttonProps.style),
             ...(focused && { display: 'none' }),
-            ':hover': {
+            '&[data-pressed]': {
               backgroundColor: 'transparent',
             },
-          }}
-          type="bare"
+          })}
+          variant="bare"
         >
           <View
             style={{

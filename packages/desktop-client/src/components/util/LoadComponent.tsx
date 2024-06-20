@@ -1,13 +1,13 @@
 import { type ComponentType, useEffect, useState } from 'react';
 
+import { Block } from '@actual-app/components/block';
+import { AnimatedLoading } from '@actual-app/components/icons/AnimatedLoading';
+import { styles } from '@actual-app/components/styles';
+import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
 import promiseRetry from 'promise-retry';
 
-import { LazyLoadFailedError } from 'loot-core/src/shared/errors';
-
-import { AnimatedLoading } from '../../icons/AnimatedLoading';
-import { theme, styles } from '../../style';
-import { Block } from '../common/Block';
-import { View } from '../common/View';
+import { LazyLoadFailedError } from 'loot-core/shared/errors';
 
 type ProplessComponent = ComponentType<Record<string, never>>;
 type LoadComponentProps<K extends string> = {
@@ -21,47 +21,46 @@ export function LoadComponent<K extends string>(props: LoadComponentProps<K>) {
   return <LoadComponentInner key={props.name} {...props} />;
 }
 
-// Cache of the various modules so we would not need to
-// load the same thing multiple times.
-const localModuleCache = new Map();
-
 function LoadComponentInner<K extends string>({
   name,
   message,
   importer,
 }: LoadComponentProps<K>) {
-  const [Component, setComponent] = useState<ProplessComponent | null>(
-    localModuleCache.get(name) ?? null,
-  );
-  const [failedToLoad, setFailedToLoad] = useState(false);
+  const [Component, setComponent] = useState<ProplessComponent | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (localModuleCache.has(name)) {
-      return;
-    }
-
-    setFailedToLoad(false);
+    let isUnmounted = false;
+    setError(null);
+    setComponent(null);
 
     // Load the module; if it fails - retry with exponential backoff
     promiseRetry(
       retry =>
         importer()
           .then(module => {
-            const component = () => module[name];
-            localModuleCache.set(name, component);
-            setComponent(component);
+            // Handle possibly being unmounted while retrying.
+            if (!isUnmounted) {
+              setComponent(() => module[name]);
+            }
           })
           .catch(retry),
       {
         retries: 5,
       },
-    ).catch(() => {
-      setFailedToLoad(true);
+    ).catch(e => {
+      if (!isUnmounted) {
+        setError(e);
+      }
     });
+
+    return () => {
+      isUnmounted = true;
+    };
   }, [name, importer]);
 
-  if (failedToLoad) {
-    throw new LazyLoadFailedError(name);
+  if (error) {
+    throw new LazyLoadFailedError(name, error);
   }
 
   if (!Component) {
