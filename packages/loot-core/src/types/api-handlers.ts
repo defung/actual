@@ -192,9 +192,16 @@ export interface ApiHandlers {
 
   'api/schedules-get': () => Promise<ScheduleEntity[]>;
 
-  'api/schedule-create': (arg: {schedule: ScheduleEntity, conditions: unknown[]}) => Promise<string>;
+  'api/schedule-create': (arg: {
+    schedule: ScheduleEntity;
+    conditions: unknown[];
+  }) => Promise<string>;
 
-  'api/schedule-update': (arg: {schedule: ScheduleEntity, conditions?: unknown[], resetNextDate?: boolean}) => Promise<void>;
+  'api/schedule-update': (arg: {
+    schedule: ScheduleEntity;
+    conditions?: unknown[];
+    resetNextDate?: boolean;
+  }) => Promise<void>;
 
   'api/schedule-delete': (arg: { id: string }) => Promise<void>;
 
