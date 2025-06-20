@@ -17,7 +17,11 @@ import {
 } from '../shared/transactions';
 import { integerToAmount } from '../shared/util';
 import { Handlers } from '../types/handlers';
-import { AccountEntity, CategoryGroupEntity } from '../types/models';
+import {
+  AccountEntity,
+  CategoryGroupEntity,
+  ScheduleEntity
+} from '../types/models';
 import { ServerHandlers } from '../types/server-handlers';
 
 import { addTransactions } from './accounts/sync';
@@ -27,7 +31,7 @@ import {
   categoryModel,
   categoryGroupModel,
   payeeModel,
-  remoteFileModel,
+  remoteFileModel, APIScheduleEntity, scheduleModel,
 } from './api-models';
 import { aqlQuery } from './aql';
 import * as cloudStorage from './cloud-storage';
@@ -38,6 +42,7 @@ import { runMutator } from './mutators';
 import * as prefs from './prefs';
 import * as sheet from './sheet';
 import { setSyncingMode, batchMessages } from './sync';
+import {DateLike, dayFromDate} from "../shared/months";
 
 let IMPORT_MODE = false;
 
@@ -766,33 +771,37 @@ handlers['api/rule-delete'] = withMutation(async function (id) {
   return handlers['rule-delete'](id);
 });
 
-handlers['api/schedules-get'] = async function () {
+handlers['api/schedules-get'] = async function ({ id } : { id?: APIScheduleEntity['id'] }): Promise<APIScheduleEntity[]> {
   checkFileOpen();
-  const { data } = await aqlQuery(q('schedules').select('*'));
+  const query = id ? q('schedules').filter({ id }).select('*') : q('schedules').select('*');
+  const { data } = await aqlQuery(query);
 
-  return data;
+  return data.map(scheduleModel.toExternal);
 };
 
 handlers['api/schedule-create'] = withMutation(async function ({
-  schedule = null,
-  conditions = [],
-}) {
+  create
+}: { create: Omit<APIScheduleEntity, 'id'> }): Promise<APIScheduleEntity['id']> {
   checkFileOpen();
   return handlers['schedule/create']({
-    schedule,
-    conditions,
+    schedule: { name: create.name, posts_transaction: create.posts_transaction },
+    conditions: scheduleModel.toInternalConditions(create),
   });
 });
 
 handlers['api/schedule-update'] = withMutation(async function ({
-  schedule,
-  conditions = [],
-  resetNextDate = false,
-}) {
+  id,
+  fields,
+  options: { resetNextDate },
+}: {
+  id: ScheduleEntity['id'];
+  fields: Partial<Omit<APIScheduleEntity, 'id'>>;
+  options?: { resetNextDate?: boolean };
+}): Promise<ScheduleEntity['id']> {
   checkFileOpen();
   return handlers['schedule/update']({
-    schedule,
-    conditions,
+    schedule: { id: id, posts_transaction: fields.posts_transaction },
+    conditions: scheduleModel.toInternalConditions(fields),
     resetNextDate,
   });
 });
@@ -812,15 +821,42 @@ handlers['api/schedule-skip-next-date'] = withMutation(async function ({ id }) {
 });
 
 handlers['api/schedule-get-upcoming-dates'] = withMutation(async function ({
-  config,
+  id,
   count,
-}) {
+}: { id: APIScheduleEntity['id'], count: number }): Promise<string[]> {
   checkFileOpen();
-  return handlers['schedule/get-upcoming-dates']({
-    config,
-    count,
-  });
+  const thisSchedule = (await handlers['api/schedules-get']({id}))[0]
+
+  if (!thisSchedule) {
+    throw APIError(`Schedule with ID ${id} not found.`);
+  }
+
+  if (typeof thisSchedule.date != 'object' || !('frequency' in thisSchedule.date)) {
+    return [dayFromDate(thisSchedule.date)];
+  }
+
+  return handlers['schedule/get-upcoming-dates']({ config: thisSchedule.date, count });
 });
+
+handlers['api/schedule-post-transaction'] = withMutation(async function ({
+  id,
+}: { id: APIScheduleEntity['id'] }): Promise<void> {
+  checkFileOpen();
+  return handlers['schedule/post-transaction']({id});
+});
+
+handlers['api/schedule-force-run-service'] = withMutation(async function ({
+  syncSuccess = false,
+}: { syncSuccess: boolean }): Promise<void> {
+  checkFileOpen();
+  return handlers['schedule/force-run-service']({syncSuccess});
+});
+
+handlers['api/schedule-discover'] = async function (): Promise<APIScheduleEntity[]> {
+  checkFileOpen();
+  const schedules: ScheduleEntity[] = await handlers['schedule/discover']();
+  return schedules.map(scheduleModel.toExternal);
+};
 
 export function installAPI(serverHandlers: ServerHandlers) {
   const merged = Object.assign({}, serverHandlers, handlers);

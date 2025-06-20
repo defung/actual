@@ -7,7 +7,7 @@ import { type SyncedPrefs } from '../types/prefs';
 
 import * as Platform from './platform';
 
-type DateLike = string | Date;
+export type DateLike = string | Date;
 type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export function _parse(value: DateLike): Date {

@@ -8,15 +8,15 @@ import type {
   APICategoryGroupEntity,
   APIFileEntity,
   APIPayeeEntity,
+  APIScheduleEntity,
 } from '../server/api-models';
 import { BudgetFileHandlers } from '../server/budgetfiles/app';
 import { type batchUpdateTransactions } from '../server/transactions';
 
-import type {
+import {
   ImportTransactionEntity,
   NewRuleEntity,
   RuleEntity,
-  ScheduleEntity,
   TransactionEntity,
 } from './models';
 
@@ -190,25 +190,28 @@ export interface ApiHandlers {
 
   'api/rule-delete': (id: string) => Promise<boolean>;
 
-  'api/schedules-get': () => Promise<ScheduleEntity[]>;
+  'api/schedules-get': (arg: { id?: APIScheduleEntity['id'] }) => Promise<APIScheduleEntity[]>;
 
-  'api/schedule-create': (arg: {
-    schedule: ScheduleEntity;
-    conditions: unknown[];
-  }) => Promise<string>;
+  'api/schedule-create': (arg: { create: Omit<APIScheduleEntity, 'id'> }) => Promise<APIScheduleEntity['id']>;
 
   'api/schedule-update': (arg: {
-    schedule: ScheduleEntity;
-    conditions?: unknown[];
-    resetNextDate?: boolean;
-  }) => Promise<void>;
+    id: APIScheduleEntity['id'];
+    fields: Partial<Omit<APIScheduleEntity, 'id'>>;
+    options?: { resetNextDate?: boolean };
+  }) => Promise<APIScheduleEntity['id']>;
 
-  'api/schedule-delete': (arg: { id: string }) => Promise<void>;
+  'api/schedule-delete': (arg: { id: APIScheduleEntity['id'] }) => Promise<void>;
 
-  'api/schedule-skip-next-date': (arg: { id: string }) => Promise<void>;
+  'api/schedule-skip-next-date': (arg: { id: APIScheduleEntity['id'] }) => Promise<void>;
+
+  'api/schedule-post-transaction': (arg: { id: APIScheduleEntity['id'] }) => Promise<void>;
+
+  'api/schedule-force-run-service': (arg: { syncSuccess: boolean }) => Promise<void>;
+
+  'api/schedule-discover': () => Promise<APIScheduleEntity[]>;
 
   'api/schedule-get-upcoming-dates': (arg: {
-    config;
+    id: APIScheduleEntity['id'];
     count: number;
   }) => Promise<string[]>;
 }

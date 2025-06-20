@@ -8,6 +8,7 @@ import { Condition } from '../server/rules';
 
 import * as monthUtils from './months';
 import { q } from './query';
+import {RecurConfig} from "loot-core/types/models";
 
 export function getStatus(
   nextDate: string,
@@ -245,7 +246,7 @@ export function getRecurringDescription(config, dateFormat, locale: Locale) {
   return `${desc}${suffix}`.trim();
 }
 
-export function recurConfigToRSchedule(config) {
+export function recurConfigToRSchedule(config: RecurConfig) {
   const base: IRuleOptions = {
     start: monthUtils.parseDate(config.start),
     // @ts-ignore: issues with https://gitlab.com/john.carroll.p/rschedule/-/issues/86

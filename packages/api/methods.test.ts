@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 import * as api from './index';
+import {APIScheduleEntity} from "loot-core/server/api-models";
 
 const budgetName = 'test-budget';
 
@@ -561,6 +562,66 @@ describe('API CRUD operations', () => {
 
     await api.deleteRule(rules[0].id);
     expect(await api.getRules()).toHaveLength(0);
+  });
+
+  // apis: createSchedule, getSchedules, updateSchedule, deleteSchedule
+  test('Schedules: successfully update schedules', async () => {
+    const newPayeeId = await api.createPayee({ name: 'test-payee2' });
+    const newAccountId = await api.createAccount({ name: 'test-account' }, 0);
+
+    const newScheduleData: Omit<APIScheduleEntity, 'id'> = {
+      name: 'test-schedule',
+      payeeId: newPayeeId,
+      accountId: newAccountId,
+      amount: {
+        op: 'is',
+        value: -1000,
+      },
+      date: '2025-05-04',
+      posts_transaction: false,
+    }
+
+    const newScheduleId = await api.createSchedule(newScheduleData);
+
+    const expectedGetSchedule: APIScheduleEntity = {
+      id: newScheduleId,
+      ...newScheduleData,
+    }
+
+    const getScheduleResult = await api.getSchedules(newScheduleId);
+
+    expect(getScheduleResult).toEqual(expectedGetSchedule);
+
+    const updateScheduleData: Partial<Omit<APIScheduleEntity, 'id'>> = {
+      date: {
+        start: '2025-05-04',
+        interval: 1,
+        frequency: 'monthly',
+        patterns: [],
+        skipWeekend: true,
+        weekendSolveMode: 'before',
+        endMode: 'never',
+      }
+    }
+
+    const updateScheduleId = await api.updateSchedule(newScheduleId, updateScheduleData);
+
+    expect(updateScheduleId).toEqual(newScheduleId);
+
+    const updatedSchedule = await api.getSchedules(newScheduleId);
+
+    const expectedUpdatedSchedule: APIScheduleEntity = {
+      ...expectedGetSchedule,
+      ...updateScheduleData,
+    }
+
+    expect(updatedSchedule).toEqual(expectedUpdatedSchedule);
+
+    await api.deleteSchedule(newScheduleId);
+
+    const getAfterDelete = await api.getSchedules(newScheduleId);
+
+    expect(getAfterDelete).toEqual([]);
   });
 
   // apis: addTransactions, getTransactions, importTransactions, updateTransaction, deleteTransaction

@@ -1,8 +1,11 @@
 // @ts-strict-ignore
 import type { Handlers } from 'loot-core/types/handlers';
-import type { ImportTransactionEntity } from 'loot-core/types/models/import-transaction';
+import {
+  ImportTransactionEntity,
+} from 'loot-core/types/models';
 
 import * as injected from './injected';
+import { APIScheduleEntity } from "loot-core/server/api-models";
 
 export { q } from './app/query';
 
@@ -240,26 +243,38 @@ export function resetBudgetHold(month) {
   return send('api/budget-reset-hold', { month });
 }
 
-export function getSchedules() {
-  return send('api/schedules-get');
+export function getSchedules(id?: APIScheduleEntity['id']): Promise<APIScheduleEntity[]> {
+  return send('api/schedules-get', { id });
 }
 
-export function createSchedule(schedule, conditions) {
-  return send('api/schedule-create', { schedule, conditions });
+export function createSchedule(create: Omit<APIScheduleEntity, 'id'>): Promise<APIScheduleEntity['id']> {
+  return send('api/schedule-create', { create });
 }
 
-export function updateSchedule(schedule, conditions, resetNextDate) {
-  return send('api/schedule-update', { schedule, conditions, resetNextDate });
+export function updateSchedule(id: APIScheduleEntity['id'], fields: Partial<Omit<APIScheduleEntity, 'id'>>, options?: { resetNextDate?: boolean }): Promise<APIScheduleEntity['id']> {
+  return send('api/schedule-update', { id, fields, options });
 }
 
-export function deleteSchedule(id) {
+export function deleteSchedule(id: APIScheduleEntity['id']): Promise<void> {
   return send('api/schedule-delete', { id });
 }
 
-export function scheduleSkipNextDate(id) {
+export function scheduleSkipNextDate(id: APIScheduleEntity['id']): Promise<void> {
   return send('api/schedule-skip-next-date', { id });
 }
 
-export function scheduleGetUpcomingDates(config, count) {
-  return send('api/schedule-get-upcoming-dates', { config, count });
+export function schedulePostTransaction(id: APIScheduleEntity['id']): Promise<void> {
+  return send('api/schedule-post-transaction', { id });
+}
+
+export function scheduleForceRunService(syncSuccess: boolean = false): Promise<void> {
+  return send('api/schedule-force-run-service', { syncSuccess });
+}
+
+export function scheduleDiscover(): Promise<APIScheduleEntity[]> {
+  return send('api/schedule-discover');
+}
+
+export function scheduleGetUpcomingDates(id: APIScheduleEntity['id'], count: number): Promise<string[]> {
+  return send('api/schedule-get-upcoming-dates', { id, count });
 }

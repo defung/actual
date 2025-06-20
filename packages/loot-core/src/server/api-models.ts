@@ -1,13 +1,14 @@
 import { Budget } from '../types/budget';
-import type {
+import {
   AccountEntity,
   CategoryEntity,
   CategoryGroupEntity,
-  PayeeEntity,
+  PayeeEntity, RecurConfig, RuleConditionEntity, ScheduleApiAmountEntity, ScheduleEntity,
 } from '../types/models';
 
 import { RemoteFile } from './cloud-storage';
 import * as models from './models';
+import {DateLike, dayFromDate} from "loot-core/shared/months";
 
 export type APIAccountEntity = Pick<AccountEntity, 'id' | 'name'> & {
   offbudget: boolean;
@@ -151,5 +152,66 @@ export const budgetModel = {
 
   fromExternal(file: APIFileEntity) {
     return file as Budget;
+  },
+};
+
+/*
+export interface ScheduleApiEntity {
+  id: ScheduleEntity['id'];
+  name: ScheduleEntity['name'];
+  payeeId: PayeeEntity['id'];
+  accountId: AccountEntity['id'];
+  amount: ScheduleApiAmountEntity;
+  date: DateLike | RecurConfig;
+  posts_transaction: boolean;
+}
+ */
+
+export interface SingleValueAmountEntity {
+  op: 'is' | 'isapprox';
+  value: number;
+}
+
+export interface MultiValueAmountEntity {
+  op: 'isbetween';
+  value: { num1: number; num2: number };
+}
+
+export type APIScheduleAmountEntity = SingleValueAmountEntity | MultiValueAmountEntity;
+
+export type APIScheduleEntity = Pick<ScheduleEntity, 'id' | 'posts_transaction'> & {
+  name: string;
+  payeeId: PayeeEntity['id'];
+  accountId: AccountEntity['id'];
+  amount: APIScheduleAmountEntity;
+  date: DateLike | RecurConfig;
+}
+
+export const scheduleModel = {
+  toExternal: (internal: ScheduleEntity): APIScheduleEntity => ({
+    id: internal.id,
+    name: internal.name ?? '',
+    payeeId: internal._payee,
+    accountId: internal._account,
+    amount: { op: internal._amountOp, value: internal._amount } as ScheduleApiAmountEntity,
+    date: internal._date || internal.next_date,
+    posts_transaction: internal.posts_transaction,
+  }),
+  toInternalConditions: (external: Partial<APIScheduleEntity>): RuleConditionEntity[] => {
+    const payeeCondition: RuleConditionEntity[] = external.payeeId ? [{ field: 'payee', op: 'is', value: external.payeeId }] : [];
+    const accountCondition: RuleConditionEntity[] = external.accountId ? [{ field: 'account', op: 'is', value: external.accountId }] : [];
+    const dateCondition: RuleConditionEntity[] = external.date ? [{
+      field: 'date',
+      op: 'isapprox',
+      value: typeof external.date === 'object' && "frequency" in external.date ? external.date : dayFromDate(external.date),
+    }] : [];
+    const amountCondition: RuleConditionEntity[] = external.amount ? [{ ...external.amount, field: 'amount' }] : [];
+
+    return [
+      ...payeeCondition,
+      ...accountCondition,
+      ...dateCondition,
+      ...amountCondition,
+    ];
   },
 };
