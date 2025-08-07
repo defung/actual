@@ -3,7 +3,17 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 import * as api from './index';
-import {APIScheduleEntity} from "loot-core/server/api-models";
+import { APIScheduleCreateEntity, APIScheduleEntity, APIScheduleUpdateEntity } from 'loot-core/server/api-models';
+import {
+  addDays,
+  addMonths,
+  currentDate,
+  currentDay,
+  DateLike,
+  dayFromDate,
+  getDay,
+  subDays,
+} from 'loot-core/shared/months';
 
 const budgetName = 'test-budget';
 
@@ -566,10 +576,12 @@ describe('API CRUD operations', () => {
 
   // apis: createSchedule, getSchedules, updateSchedule, deleteSchedule
   test('Schedules: successfully update schedules', async () => {
+    const startDate = currentDay();
+    const today = new Date();
     const newPayeeId = await api.createPayee({ name: 'test-payee2' });
     const newAccountId = await api.createAccount({ name: 'test-account' }, 0);
 
-    const newScheduleData: Omit<APIScheduleEntity, 'id'> = {
+    const newScheduleData: APIScheduleCreateEntity = {
       name: 'test-schedule',
       payeeId: newPayeeId,
       accountId: newAccountId,
@@ -577,24 +589,26 @@ describe('API CRUD operations', () => {
         op: 'is',
         value: -1000,
       },
-      date: '2025-05-04',
+      date: startDate,
       posts_transaction: false,
     }
 
     const newScheduleId = await api.createSchedule(newScheduleData);
 
-    const expectedGetSchedule: APIScheduleEntity = {
+    const expectedGetSchedule: APIScheduleEntity[] = [{
       id: newScheduleId,
       ...newScheduleData,
-    }
+      next_date: startDate,
+      completed: false,
+    }]
 
     const getScheduleResult = await api.getSchedules(newScheduleId);
 
     expect(getScheduleResult).toEqual(expectedGetSchedule);
 
-    const updateScheduleData: Partial<Omit<APIScheduleEntity, 'id'>> = {
+    const updateScheduleData: APIScheduleUpdateEntity = {
       date: {
-        start: '2025-05-04',
+        start: startDate,
         interval: 1,
         frequency: 'monthly',
         patterns: [],
@@ -610,10 +624,11 @@ describe('API CRUD operations', () => {
 
     const updatedSchedule = await api.getSchedules(newScheduleId);
 
-    const expectedUpdatedSchedule: APIScheduleEntity = {
-      ...expectedGetSchedule,
+    const expectedUpdatedSchedule: APIScheduleEntity[] = [{
+      ...expectedGetSchedule[0],
       ...updateScheduleData,
-    }
+      next_date: getDay(today) === 1 ? dayFromDate(today) : `${addMonths(today, 1)}-01`,
+    }]
 
     expect(updatedSchedule).toEqual(expectedUpdatedSchedule);
 
@@ -800,4 +815,107 @@ describe('API CRUD operations', () => {
     );
     expect(transactions[0].notes).toBeNull();
   });
+});
+
+const createSchedule = async (startDate: DateLike): Promise<APIScheduleEntity["id"]> => {
+  const newPayeeId = await api.createPayee({ name: 'test-payee2' });
+  const newAccountId = await api.createAccount({ name: 'test-account' }, 0);
+
+  const newScheduleData: APIScheduleCreateEntity = {
+    name: 'test-schedule',
+    payeeId: newPayeeId,
+    accountId: newAccountId,
+    amount: {
+      op: 'is',
+      value: -1000,
+    },
+    date: {
+      start: dayFromDate(startDate),
+      interval: 1,
+      frequency: 'monthly',
+      patterns: [],
+      skipWeekend: false,
+      endMode: 'never',
+    },
+    posts_transaction: false,
+  }
+
+  return api.createSchedule(newScheduleData);
+}
+
+describe('Schedules operations', () => {
+  beforeEach(async () => {
+    // load test budget
+    await api.loadBudget(budgetName);
+  });
+
+  test('scheduleGetUpcomingDates: correctly get upcoming recurring dates', async () => {
+    const startDate = currentDay();
+    const today = new Date();
+    const expectedFirstUpcomingDate =
+      getDay(today) === 1 ? dayFromDate(today) : `${addMonths(today, 1)}-01`;
+    const scheduleId = await createSchedule(startDate);
+    const upcomingDates = await api.scheduleGetUpcomingDates(scheduleId, 3);
+
+    const expected = [0, 1, 2].map((i) => `${addMonths(expectedFirstUpcomingDate, i)}-01`);
+
+    expect(upcomingDates).toStrictEqual(expected);
+  });
+
+  test('scheduleSkipNextDate: correctly skips next date', async () => {
+    const startDate = currentDay();
+    const scheduleId = await createSchedule(startDate);
+    const beforeSkipSchedule = await api.getSchedules(scheduleId);
+
+    expect(beforeSkipSchedule[0].next_date).toBe(startDate);
+
+    await api.scheduleSkipNextDate(scheduleId);
+
+    const afterSkipSchedule = await api.getSchedules(scheduleId);
+
+    expect(afterSkipSchedule[0].next_date).toBe(`${addMonths(startDate, 1)}-01`);
+  });
+
+  test('schedulePostTransaction: correctly posts transaction for today',
+    async () => {
+      const startDate = currentDay();
+      const scheduleId = await createSchedule(startDate);
+      const [theSchedule] = await api.getSchedules(scheduleId);
+
+      const beforeTransactions = await api.getTransactions(theSchedule.accountId, subDays(currentDay(), 1), addDays(currentDay(), 1));
+
+      expect(beforeTransactions).toHaveLength(0);
+
+      await api.schedulePostTransaction(scheduleId);
+
+      const afterTransactions = await api.getTransactions(theSchedule.accountId, subDays(currentDay(), 1), addDays(currentDay(), 1));
+
+      const expectedTransactions = [{
+        id: afterTransactions[0].id,
+        is_parent: false,
+        is_child: false,
+        parent_id: null,
+        account: theSchedule.accountId,
+        category: null,
+        amount: -1000,
+        payee: theSchedule.payeeId,
+        notes: null,
+        date: currentDay(),
+        imported_id: null,
+        error: null,
+        imported_payee: null,
+        starting_balance_flag: false,
+        transfer_id: null,
+        sort_order: afterTransactions[0].sort_order,
+        cleared: false,
+        reconciled: false,
+        tombstone: false,
+        schedule: theSchedule.id,
+        raw_synced_data: null,
+        subtransactions: [],
+      }];
+
+      expect(afterTransactions).toStrictEqual(expectedTransactions);
+
+    });
 });

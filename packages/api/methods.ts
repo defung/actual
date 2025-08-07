@@ -5,7 +5,7 @@ import {
 } from 'loot-core/types/models';
 
 import * as injected from './injected';
-import { APIScheduleEntity } from "loot-core/server/api-models";
+import { APIScheduleCreateEntity, APIScheduleEntity, APIScheduleUpdateEntity } from 'loot-core/server/api-models';
 
 export { q } from './app/query';
 
@@ -247,11 +247,11 @@ export function getSchedules(id?: APIScheduleEntity['id']): Promise<APIScheduleE
   return send('api/schedules-get', { id });
 }
 
-export function createSchedule(create: Omit<APIScheduleEntity, 'id'>): Promise<APIScheduleEntity['id']> {
+export function createSchedule(create: APIScheduleCreateEntity): Promise<APIScheduleEntity['id']> {
   return send('api/schedule-create', { create });
 }
 
-export function updateSchedule(id: APIScheduleEntity['id'], fields: Partial<Omit<APIScheduleEntity, 'id'>>, options?: { resetNextDate?: boolean }): Promise<APIScheduleEntity['id']> {
+export function updateSchedule(id: APIScheduleEntity['id'], fields: APIScheduleUpdateEntity, options?: { resetNextDate?: boolean }): Promise<APIScheduleEntity['id']> {
   return send('api/schedule-update', { id, fields, options });
 }
 

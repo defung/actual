@@ -3,7 +3,7 @@ import {
   AccountEntity,
   CategoryEntity,
   CategoryGroupEntity,
-  PayeeEntity, RecurConfig, RuleConditionEntity, ScheduleApiAmountEntity, ScheduleEntity,
+  PayeeEntity, RecurConfig, RuleConditionEntity, ScheduleEntity,
 } from '../types/models';
 
 import { RemoteFile } from './cloud-storage';
@@ -155,18 +155,6 @@ export const budgetModel = {
   },
 };
 
-/*
-export interface ScheduleApiEntity {
-  id: ScheduleEntity['id'];
-  name: ScheduleEntity['name'];
-  payeeId: PayeeEntity['id'];
-  accountId: AccountEntity['id'];
-  amount: ScheduleApiAmountEntity;
-  date: DateLike | RecurConfig;
-  posts_transaction: boolean;
-}
- */
-
 export interface SingleValueAmountEntity {
   op: 'is' | 'isapprox';
   value: number;
@@ -181,11 +169,17 @@ export type APIScheduleAmountEntity = SingleValueAmountEntity | MultiValueAmount
 
 export type APIScheduleEntity = Pick<ScheduleEntity, 'id' | 'posts_transaction'> & {
   name: string;
-  payeeId: PayeeEntity['id'];
-  accountId: AccountEntity['id'];
+  payeeId?: APIPayeeEntity['id'];
+  accountId?: APIAccountEntity['id'];
   amount: APIScheduleAmountEntity;
   date: DateLike | RecurConfig;
+  next_date: DateLike;
+  completed: boolean;
 }
+
+export type APIScheduleCreateEntity = Pick<APIScheduleEntity, 'name' | 'payeeId' | 'accountId' | 'amount' | 'date' | 'posts_transaction'>
+
+export type APIScheduleUpdateEntity = Partial<APIScheduleCreateEntity>;
 
 export const scheduleModel = {
   toExternal: (internal: ScheduleEntity): APIScheduleEntity => ({
@@ -193,9 +187,11 @@ export const scheduleModel = {
     name: internal.name ?? '',
     payeeId: internal._payee,
     accountId: internal._account,
-    amount: { op: internal._amountOp, value: internal._amount } as ScheduleApiAmountEntity,
+    amount: { op: internal._amountOp, value: internal._amount } as APIScheduleAmountEntity,
     date: internal._date || internal.next_date,
     posts_transaction: internal.posts_transaction,
+    next_date: internal.next_date,
+    completed: internal.completed,
   }),
   toInternalConditions: (external: Partial<APIScheduleEntity>): RuleConditionEntity[] => {
     const payeeCondition: RuleConditionEntity[] = external.payeeId ? [{ field: 'payee', op: 'is', value: external.payeeId }] : [];

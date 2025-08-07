@@ -7,8 +7,20 @@ import { type SyncedPrefs } from '../types/prefs';
 
 import * as Platform from './platform';
 
-export type DateLike = string | Date;
+export type DateLike = number | string | Date;
 type Day = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export function isDateLike(something: unknown): something is DateLike {
+  try {
+    if (typeof something === 'string' || typeof something === 'number') {
+      const d = _parse(something);
+      return d instanceof Date;
+    }
+    return d instanceof Date;
+  } catch (e) {
+    return false;
+  }
+}
 
 export function _parse(value: DateLike): Date {
   if (typeof value === 'string') {
@@ -368,7 +380,7 @@ export function getMonth(day: string): string {
   return day.slice(0, 7);
 }
 
-export function getDay(day: string): number {
+export function getDay(day: DateLike): number {
   return Number(d.format(_parse(day), 'dd'));
 }
 

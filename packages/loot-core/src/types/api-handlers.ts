@@ -2,13 +2,13 @@
 import { ImportTransactionsOpts } from '@actual-app/api';
 
 import type { ImportTransactionsResult } from '../server/accounts/app';
-import type {
+import {
   APIAccountEntity,
   APICategoryEntity,
   APICategoryGroupEntity,
   APIFileEntity,
-  APIPayeeEntity,
-  APIScheduleEntity,
+  APIPayeeEntity, APIScheduleCreateEntity,
+  APIScheduleEntity, APIScheduleUpdateEntity,
 } from '../server/api-models';
 import { BudgetFileHandlers } from '../server/budgetfiles/app';
 import { type batchUpdateTransactions } from '../server/transactions';
@@ -192,11 +192,11 @@ export interface ApiHandlers {
 
   'api/schedules-get': (arg: { id?: APIScheduleEntity['id'] }) => Promise<APIScheduleEntity[]>;
 
-  'api/schedule-create': (arg: { create: Omit<APIScheduleEntity, 'id'> }) => Promise<APIScheduleEntity['id']>;
+  'api/schedule-create': (arg: { create: APIScheduleCreateEntity }) => Promise<APIScheduleEntity['id']>;
 
   'api/schedule-update': (arg: {
     id: APIScheduleEntity['id'];
-    fields: Partial<Omit<APIScheduleEntity, 'id'>>;
+    fields: APIScheduleUpdateEntity;
     options?: { resetNextDate?: boolean };
   }) => Promise<APIScheduleEntity['id']>;
 

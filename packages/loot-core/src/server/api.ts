@@ -31,7 +31,7 @@ import {
   categoryModel,
   categoryGroupModel,
   payeeModel,
-  remoteFileModel, APIScheduleEntity, scheduleModel,
+  remoteFileModel, APIScheduleEntity, scheduleModel, APIScheduleCreateEntity, APIScheduleUpdateEntity,
 } from './api-models';
 import { aqlQuery } from './aql';
 import * as cloudStorage from './cloud-storage';
@@ -42,7 +42,9 @@ import { runMutator } from './mutators';
 import * as prefs from './prefs';
 import * as sheet from './sheet';
 import { setSyncingMode, batchMessages } from './sync';
-import {DateLike, dayFromDate} from "../shared/months";
+import { currentDay, DateLike, dayFromDate, isBefore, isDateLike } from '../shared/months';
+
+
 
 let IMPORT_MODE = false;
 
@@ -781,7 +783,7 @@ handlers['api/schedules-get'] = async function ({ id } : { id?: APIScheduleEntit
 
 handlers['api/schedule-create'] = withMutation(async function ({
   create
-}: { create: Omit<APIScheduleEntity, 'id'> }): Promise<APIScheduleEntity['id']> {
+}: { create: APIScheduleCreateEntity }): Promise<APIScheduleEntity['id']> {
   checkFileOpen();
   return handlers['schedule/create']({
     schedule: { name: create.name, posts_transaction: create.posts_transaction },
@@ -792,17 +794,32 @@ handlers['api/schedule-create'] = withMutation(async function ({
 handlers['api/schedule-update'] = withMutation(async function ({
   id,
   fields,
-  options: { resetNextDate },
+  options,
 }: {
-  id: ScheduleEntity['id'];
-  fields: Partial<Omit<APIScheduleEntity, 'id'>>;
+  id: APIScheduleEntity['id'];
+  fields: APIScheduleUpdateEntity;
   options?: { resetNextDate?: boolean };
-}): Promise<ScheduleEntity['id']> {
+}): Promise<APIScheduleEntity['id']> {
   checkFileOpen();
+
+  if (fields.name) {
+    const { data: sameName } = await aqlQuery(q('schedules').filter({ name: fields.name }).select('id'));
+    if (sameName.length > 0 && sameName[0].id !== id) {
+      throw APIError(`There is already a schedule with this name ’${fields.name}’`);
+    }
+  }
+
+  const scheduleProps = {
+    id,
+    ...(fields.name ? { name: fields.name } : {}),
+    ...(fields.posts_transaction ? { posts_transaction: fields.posts_transaction } : {}),
+  };
+
+
   return handlers['schedule/update']({
-    schedule: { id: id, posts_transaction: fields.posts_transaction },
+    schedule: scheduleProps,
     conditions: scheduleModel.toInternalConditions(fields),
-    resetNextDate,
+    resetNextDate: options?.resetNextDate,
   });
 });
 
@@ -815,9 +832,7 @@ handlers['api/schedule-delete'] = withMutation(async function ({ id }) {
 
 handlers['api/schedule-skip-next-date'] = withMutation(async function ({ id }) {
   checkFileOpen();
-  return handlers['schedule/skip-next-date']({
-    id,
-  });
+  return handlers['schedule/skip-next-date']({ id: id });
 });
 
 handlers['api/schedule-get-upcoming-dates'] = withMutation(async function ({
@@ -831,8 +846,14 @@ handlers['api/schedule-get-upcoming-dates'] = withMutation(async function ({
     throw APIError(`Schedule with ID ${id} not found.`);
   }
 
-  if (typeof thisSchedule.date != 'object' || !('frequency' in thisSchedule.date)) {
-    return [dayFromDate(thisSchedule.date)];
+  if (isDateLike(thisSchedule.date)) {
+    const scheduleDate = dayFromDate(thisSchedule.date);
+
+    if (isBefore(scheduleDate, currentDay())) {
+      return [];
+    }
+
+    return [scheduleDate];
   }
 
   return handlers['schedule/get-upcoming-dates']({ config: thisSchedule.date, count });
